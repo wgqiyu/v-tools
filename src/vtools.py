@@ -149,8 +149,16 @@ class VM:
     def name(self) -> str:
         return self.vim_obj.summary.config.name
 
+    @property
+    def path(self) -> str:
+        return self.vim_obj.summary.config.vmPathName
+
+    @property
+    def state(self) -> str:
+        return self.vim_obj.summary.runtime.powerState
+
     def __repr__(self) -> str:
-        return f'VM(name={self.name})'
+        return f'VM(name={self.name}, Path={self.path}, Power State={self.state})'
 
 
 class Datastore:
@@ -239,9 +247,9 @@ class ESXi:
 
         return [one_vm for one_vm in all_vms if condition(one_vm)]
 
-    def get_vm(self, condition: Callable[[VM], bool] = None) -> VM:
+    def get_vm(self, condition: Callable[[VM, str], bool] = None, rule: str = None) -> VM:
         for one_vm in self.list_vm():
-            if condition(one_vm):
+            if condition(one_vm, rule):
                 return one_vm
         return None
 
@@ -263,8 +271,9 @@ class ESXi:
         return [one_datastore for one_datastore in all_datastores
                 if condition(one_datastore)]
 
-    def get_datastore(self, condition: Callable[[Datastore], bool] = None) -> Datastore:
+    def get_datastore(self, condition: Callable[[Datastore, str], bool] = None, rule: str = None)\
+            -> Datastore:
         for one_datastore in self.list_datastore():
-            if condition(one_datastore):
+            if condition(one_datastore, rule):
                 return one_datastore
         return None
