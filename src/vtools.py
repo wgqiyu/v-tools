@@ -6,6 +6,13 @@ from typing import (
 )
 
 import requests
+from requests.compat import urljoin
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_fixed,
+    TryAgain
+)
 
 from pyVim.connect import SmartConnect
 from pyVim.task import WaitForTask
@@ -74,11 +81,17 @@ def create_import_spec(
     vm_name: str = None,
     disk_provisioning: str = None
 ) -> vim.OvfManager.CreateImportSpecResult:
+    response = requests.get(ovf_url)
+    response.encoding = "utf-8"
+    ovf_descriptor = response.text
+
     spec_params = vim.OvfManager.CreateImportSpecParams()
+
     if vm_name is not None:
         spec_params.entityName = vm_name
     if disk_provisioning is not None:
         spec_params.diskProvisioning = disk_provisioning
+
     spec_params.networkMapping = []
 
     network_mapping = vim.OvfManager.NetworkMapping()
@@ -88,14 +101,41 @@ def create_import_spec(
                                                   name="VM Network")
     spec_params.networkMapping.append(network_mapping)
 
-    response = requests.get(ovf_url)
-    response.encoding = "utf-8"
-    ovf_descriptor = response.text
-
     return content.ovfManager.CreateImportSpec(ovf_descriptor,
                                                resource_pool_vim_obj,
                                                datastore_vim_obj,
                                                spec_params)
+
+
+def create_http_nfc_lease(resource_pool_vim_obj: vim.ResourcePool,
+                          spec_vim_obj: vim.ImportSpec,
+                          folder_vim_obj: vim.Folder) -> vim.HttpNfcLease:
+    http_nfc_lease = resource_pool_vim_obj.ImportVApp(spec_vim_obj, folder_vim_obj)
+
+    @retry(stop=stop_after_attempt(6),
+           wait=wait_fixed(5))
+    def wait_until_http_nfc_lease_ready():
+        lease_state = http_nfc_lease.state
+        if lease_state != vim.HttpNfcLease.State.ready:
+            raise TryAgain
+
+    wait_until_http_nfc_lease_ready()
+
+    return http_nfc_lease
+
+
+def deploy_vm_with_pull_mode(ovf_url, import_spec, http_nfc_lease):
+    source_files = []
+    for file in import_spec.fileItem:
+        source_file = vim.HttpNfcLease.SourceFile(
+            targetDeviceId=file.deviceId,
+            url=urljoin(ovf_url, file.path),
+            sslThumbprint="",
+            create=file.create
+        )
+        source_files.append(source_file)
+    task = http_nfc_lease.PullFromUrls(source_files)
+    WaitForTask(task)
 
 
 class VM:
@@ -170,6 +210,25 @@ class ESXi:
         WaitForTask(task)
 
         return VM(task.info.result)
+
+    def import_ovf(self, name: str, datastore: Datastore, ovf_url: str) -> VM:
+        resource_pool_vim_obj = self.vim_obj.parent.resourcePool
+        datacenter_vim_obj = get_first_vim_obj(self._content, vim.Datacenter)
+        vm_folder_vim_obj = datacenter_vim_obj.vmFolder
+
+        create_result = create_import_spec(content=self._content,
+                                           ovf_url=ovf_url,
+                                           resource_pool_vim_obj=resource_pool_vim_obj,
+                                           datastore_vim_obj=datastore.vim_obj,
+                                           vm_name=name)
+
+        http_nfc_lease = create_http_nfc_lease(resource_pool_vim_obj=resource_pool_vim_obj,
+                                               spec_vim_obj=create_result.importSpec,
+                                               folder_vim_obj=vm_folder_vim_obj)
+
+        deploy_vm_with_pull_mode(ovf_url, create_result, http_nfc_lease)
+
+        http_nfc_lease.Complete()
 
     def list_vm(self, condition: Callable[[VM], bool] = None) -> List[VM]:
         all_vms = [VM(vm_vim_obj) for vm_vim_obj in
