@@ -51,9 +51,10 @@ def destroy_vm(criteria: str, rule: str):
 if __name__ == "__main__":
     esxi = ESXi(ip="10.161.162.8", user="root", pwd="CSEQz4d+r8jeM*lS")
     print("+++++++++++++++++++++ Connected to ESXi ++++++++++++++++++++++++++++++++")
-    app()
 
-    # esxi.import_ovf(name='win11_vm',
-    #                 datastore=esxi.get_datastore(
-    #                     lambda datastore: datastore.name == 'local-0'),
-    #                 ovf_url='http://sftp-eng.eng.vmware.com/vmstorage/qe/windows/windows11/64/111538-Windows-11-v21H2-64-Enterprise-NVMe-Tools/111538-Windows-11-v21H2-64-Enterprise-NVMe-Tools.ovf')
+    esxi.import_ovf(name='win11_vm',
+                    datastore=esxi.get_datastore(
+                        lambda datastore: datastore.name == 'local-0'),
+                    ovf_url='http://sftp-eng.eng.vmware.com/vmstorage/qe/windows/windows11/64/111538-Windows-11-v21H2-64-Enterprise-NVMe-Tools/111538-Windows-11-v21H2-64-Enterprise-NVMe-Tools.ovf')
+
+    app()
