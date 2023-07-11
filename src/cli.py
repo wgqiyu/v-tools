@@ -9,19 +9,15 @@ app = typer.Typer()
 console = Console()
 
 
-def filter_by_name(vim_obj, rule):
-    return re.search(rule, vim_obj.vim_obj.name)
-
-
 @app.command()
 def list_vm():
     table = Table(show_header=True, header_style="bold magenta")
     vm_list = esxi.list_vm()
     table.add_column("Vm Name", style="dim", width=12)
-    table.add_column("Path", style="dim", width=25)
+    table.add_column("Path", style="dim", width=40)
     table.add_column("Power State", style="dim", width=12)
     for vm in vm_list:
-        table.add_row(vm.name, vm.path, vm.state)
+        table.add_row(vm.name, vm.path, vm.power_state)
     console.print(table)
 
 
@@ -37,13 +33,19 @@ def list_datastore():
 
 
 @app.command()
-def create_vm(name: str, func: str, datastore_name: str):
-    console.print(esxi.create_vm(name=name, datastore=esxi.get_datastore(eval(func), datastore_name)))
+def create_vm(name: str, criteria: str, rule: str):
+    if criteria == "name":
+        console.print(esxi.create_vm(name=name, datastore=esxi.get_datastore(lambda ds: ds.name == rule)))
+    if criteria == "type":
+        console.print(esxi.create_vm(name=name, datastore=esxi.get_datastore(lambda ds: ds.type == rule)))
 
 
 @app.command()
-def destroy_vm(func: str, rule: str):
-    esxi.delete_vm(vm=esxi.get_vm(eval(func), rule))
+def destroy_vm(criteria: str, rule: str):
+    if criteria == "name":
+        esxi.delete_vm(vm=esxi.get_vm(lambda vm: vm.name == rule))
+    if criteria == "path":
+        esxi.delete_vm(vm=esxi.get_vm(lambda vm: vm.path == rule))
 
 
 if __name__ == "__main__":
