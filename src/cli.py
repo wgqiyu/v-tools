@@ -10,11 +10,15 @@ console = Console()
 
 def check_criteria(vim_obj: str, criteria: str, rule: str):
     if vim_obj == "vm":
+        if criteria is None:
+            return esxi.list_vm()
         if criteria == "name":
             return esxi.list_vm(lambda vm: vm.name == rule)
         if criteria == "path":
             return esxi.list_vm(lambda vm: vm.path == rule)
     if vim_obj == "datastore":
+        if criteria is None:
+            return esxi.list_datastore()
         if criteria == "name":
             return esxi.list_datastore(lambda ds: ds.name == rule)
         if criteria == "type":
@@ -22,9 +26,9 @@ def check_criteria(vim_obj: str, criteria: str, rule: str):
 
 
 @app.command()
-def list_vm(criteria: str, rule: str):
+def list_vm(vm_criteria: str = None, rule: str = None):
     table = Table(show_header=True, header_style="bold magenta")
-    vm_list = check_criteria("vm", criteria, rule)
+    vm_list = check_criteria("vm", vm_criteria, rule)
     table.add_column("Vm Name", style="dim", width=12)
     table.add_column("Path", style="dim", width=40)
     table.add_column("Power State", style="dim", width=12)
@@ -34,9 +38,9 @@ def list_vm(criteria: str, rule: str):
 
 
 @app.command()
-def list_datastore(criteria: str, rule: str):
+def list_datastore(datastore_criteria: str = None, rule: str = None):
     table = Table(show_header=True, header_style="bold magenta")
-    ds_list = check_criteria("datastore", criteria, rule)
+    ds_list = check_criteria("datastore", datastore_criteria, rule)
     table.add_column("Datastore Name", style="dim", width=40)
     table.add_column("Type", style="dim", width=8)
     for ds in ds_list:
@@ -45,18 +49,18 @@ def list_datastore(criteria: str, rule: str):
 
 
 @app.command()
-def create_vm(name: str, criteria: str, rule: str):
-    if criteria == "name":
+def create_vm(name: str, datastore_criteria: str, rule: str):
+    if datastore_criteria == "name":
         console.print(esxi.create_vm(name=name, datastore=esxi.get_datastore(lambda ds: ds.name == rule)))
-    if criteria == "type":
+    if datastore_criteria == "type":
         console.print(esxi.create_vm(name=name, datastore=esxi.get_datastore(lambda ds: ds.type == rule)))
 
 
 @app.command()
-def destroy_vm(criteria: str, rule: str):
-    if criteria == "name":
+def destroy_vm(vm_criteria: str, rule: str):
+    if vm_criteria == "name":
         esxi.delete_vm(vm=esxi.get_vm(lambda vm: vm.name == rule))
-    if criteria == "path":
+    if vm_criteria == "path":
         esxi.delete_vm(vm=esxi.get_vm(lambda vm: vm.path == rule))
 
 
@@ -69,4 +73,3 @@ if __name__ == "__main__":
     #                 datastore=esxi.get_datastore(
     #                     lambda datastore: datastore.name == 'local-0'),
     #                 ovf_url='http://sftp-eng.eng.vmware.com/vmstorage/qe/windows/windows11/64/111538-Windows-11-v21H2-64-Enterprise-NVMe-Tools/111538-Windows-11-v21H2-64-Enterprise-NVMe-Tools.ovf')
-
