@@ -149,8 +149,16 @@ class VM:
     def name(self) -> str:
         return self.vim_obj.summary.config.name
 
+    @property
+    def path(self) -> str:
+        return self.vim_obj.summary.config.vmPathName
+
+    @property
+    def power_state(self) -> str:
+        return self.vim_obj.summary.runtime.powerState
+
     def __repr__(self) -> str:
-        return f'VM(name={self.name})'
+        return f'VM(name={self.name}, path={self.path})'
 
 
 class Datastore:
