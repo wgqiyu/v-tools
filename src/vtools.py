@@ -160,6 +160,15 @@ class VM:
     def __repr__(self) -> str:
         return f'VM(name={self.name}, path={self.path})'
 
+    def power_on(self):
+        WaitForTask(self.vim_obj.PowerOn())
+
+    def power_off(self):
+        WaitForTask(self.vim_obj.PowerOff())
+
+    def suspend(self):
+        WaitForTask(self.vim_obj.Suspend())
+
 
 class Datastore:
     def __init__(
