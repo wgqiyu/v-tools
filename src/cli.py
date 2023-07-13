@@ -73,8 +73,11 @@ def power_on(name: Annotated[str, typer.Argument(help="The name VM to power on")
 @app.command()
 def power_off(name: Annotated[str, typer.Argument(help="The name VM to power off")]):
     vim = esxi.get_vm(lambda vm: vm.name == name)
-    vim.power_off()
-    console.print(f"{vim.name} Powered Off")
+    if format(vim.vim_obj.runtime.powerState) != "poweredOff":
+        vim.power_off()
+        console.print(f"{vim.name} Powered Off")
+    else:
+        console.print(f"{vim.name} is not powered off")
 
 
 @app.command()
