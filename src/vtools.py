@@ -138,6 +138,14 @@ def deploy_vm_with_pull_mode(ovf_url, import_spec, http_nfc_lease):
     WaitForTask(task)
 
 
+def list_snapshots_recursively(snapshot_data, snapshots):
+    if snapshots is not None:
+        for snapshot in snapshots:
+            snapshot_data.append(Snapshot(snapshot))
+            list_snapshots_recursively(snapshot_data, snapshot.childSnapshotList)
+    return snapshot_data
+
+
 class VM:
     def __init__(
         self,
@@ -168,6 +176,64 @@ class VM:
 
     def suspend(self):
         WaitForTask(self.vim_obj.Suspend())
+
+    def list_snapshot(self):
+        snapshot_data = []
+        snapshot = self.vim_obj.snapshot
+        # print("rootSnapshotList", snapshot.rootSnapshotList)
+        if snapshot is not None:
+            list_snapshots_recursively(snapshot_data, snapshot.rootSnapshotList)
+            return snapshot_data
+        else:
+            print(f"There is no snapshots yet on {self.name}")
+            return snapshot_data
+
+    def get_snapshot(self, name: str):
+        snapshots = self.list_snapshot()
+        for snapshot in snapshots:
+            if snapshot.name == name:
+                return snapshot
+        return None
+
+    def create_snapshot(self, name: str,
+                        description: str = None,
+                        memory: bool = True,
+                        quiesce: bool = False):
+        if self.get_snapshot(name):
+            print("Invalid Name: The VM has already exist. ")
+            return
+        task = self.vim_obj.CreateSnapshot(name, description, memory, quiesce)
+        WaitForTask(task)
+        snapshot = self.get_snapshot(name)
+        return Snapshot(snapshot)
+
+    def destroy_snapshot(self, name: str):
+        snapshot = self.get_snapshot(name)
+        if snapshot is not None:
+            snapshot.remove()
+            return name
+        else:
+            print("The VM you designated does not exist")
+
+
+class Snapshot:
+    def __init__(self, vim_obj: vim.vm.SnapshotTree) -> None:
+        self.vim_obj = vim_obj
+
+    @property
+    def name(self) -> str:
+        return self.vim_obj.name
+
+    @property
+    def description(self) -> str:
+        return self.vim_obj.description
+
+    def __repr__(self):
+        return f'Snapshot(name={self.name}, description={self.description})'
+
+    def remove(self):
+        task = self.vim_obj.snapshot.Remove(removeChildren=False)
+        WaitForTask(task)
 
 
 class Datastore:

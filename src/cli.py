@@ -66,8 +66,11 @@ def destroy_vm(pattern: Annotated[str, typer.Argument(help="The name of VM to de
 @app.command()
 def power_on(name: Annotated[str, typer.Argument(help="The name VM to power on")]):
     vim = esxi.get_vm(lambda vm: vm.name == name)
-    vim.power_on()
-    console.print(f"{vim.name} Powered On")
+    if format(vim.vim_obj.runtime.powerState) != "poweredOn":
+        console.print(f"{vim.name} is already powered on")
+    else:
+        vim.power_on()
+        console.print(f"{vim.name} Powered On")
 
 
 @app.command()
@@ -91,6 +94,36 @@ def suspend(name: Annotated[str, typer.Argument(help="The name VM to suspend")])
 
 
 @app.command()
+def list_snapshot(name: Annotated[str, typer.Argument(help="The name of VM to list its snapshots")]):
+    vim = esxi.get_vm(lambda vm: vm.name == name)
+    snapshots = vim.list_snapshot()
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Snapshot Name", style="dim")
+    table.add_column("Snapshot Description", style="dim")
+    for snapshot in snapshots:
+        table.add_row(snapshot.name, snapshot.description)
+    console.print(table)
+
+
+@app.command()
+def create_snapshot(snapshot_name: Annotated[str, typer.Argument(help="The name of snapshot")],
+                    name: Annotated[str, typer.Argument(help="The VM to take the snapshot")]):
+    vim = esxi.get_vm(lambda vm: vm.name == name)
+    snapshot = vim.create_snapshot(name=snapshot_name, description="This is a test for snapshot")
+    if snapshot:
+        console.print(snapshot)
+        console.print(f"Snapshot '{snapshot_name}' of {vim.name} is created")
+
+
+@app.command()
+def destroy_snapshot(snapshot_name: Annotated[str, typer.Argument(help="The snapshot to destroy")],
+                     name: Annotated[str, typer.Argument(help="The VM corresponding to the snapshot")]):
+    vim = esxi.get_vm(lambda vm: vm.name == name)
+    if vim.destroy_snapshot(snapshot_name):
+        console.print(f"Snapshot '{snapshot_name}' of {vim.name} is destroyed")
+
+
+@app.command()
 def import_ovf(name: Annotated[str, typer.Argument(help="The name VM to import")],
                datastore: Annotated[str, typer.Argument(help="The datastore to import to")],
                ovf_url: Annotated[str, typer.Argument(help="The ovf file url")]):
@@ -103,6 +136,7 @@ if __name__ == "__main__":
     esxi = ESXi(ip="10.161.162.8", user="root", pwd="CSEQz4d+r8jeM*lS")
     console.print("+++++++++++++++++++++ Connected to ESXi ++++++++++++++++++++++++++++++++")
     app()
+
     # esxi.import_ovf(name='win11_vm',
     #                 datastore=esxi.get_datastore(
     #                     lambda datastore: datastore.name == 'local-0'),
