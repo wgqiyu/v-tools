@@ -63,12 +63,21 @@ def get_vim_obj_by_name(
     return None
 
 
-def create_config_spec() -> vim.vm.ConfigSpec:
+def create_config_spec(name: str,
+                       datastore: vim.Datastore,
+                       annotation: str,
+                       memory_size: int,
+                       guest_id: str,
+                       num_cpus: int) -> vim.vm.ConfigSpec:
     config_spec = vim.vm.ConfigSpec()
-    config_spec.annotation = 'Sample'
-    config_spec.memoryMB = 128
-    config_spec.guestId = 'otherGuest'
-    config_spec.numCPUs = 1
+    config_spec.annotation = annotation
+    config_spec.memoryMB = memory_size
+    config_spec.guestId = guest_id
+    config_spec.numCPUs = num_cpus
+    config_spec.name = name
+    files = vim.vm.FileInfo()
+    files.vmPathName = f"[{datastore.name}]"
+    config_spec.files = files
 
     return config_spec
 
@@ -165,8 +174,16 @@ class VM:
     def power_state(self) -> str:
         return self.vim_obj.summary.runtime.powerState
 
+    @property
+    def memory(self) -> int:
+        return self.vim_obj.summary.config.memorySizeMB
+
+    @property
+    def num_cpus(self) -> int:
+        return self.vim_obj.summary.config.numCpu
+
     def __repr__(self) -> str:
-        return f'VM(name={self.name}, path={self.path})'
+        return f'VM(name={self.name}, path={self.path}, memory={self.memory}, num_cpus={self.num_cpus})'
 
     def power_on(self):
         WaitForTask(self.vim_obj.PowerOn())
@@ -277,16 +294,18 @@ class ESXi:
         self.vim_obj = get_first_vim_obj(content=self._content,
                                          vim_type=vim.HostSystem)
 
-    def create_vm(self, name: str, datastore: Datastore) -> VM:
+    def create_vm(self,
+                  name: str,
+                  datastore: vim.Datastore,
+                  annotation: str,
+                  memory_size: int,
+                  guest_id: str,
+                  num_cpus: int) -> VM:
         resource_pool_vim_obj = self.vim_obj.parent.resourcePool
         datacenter_vim_obj = get_first_vim_obj(self._content, vim.Datacenter)
         vm_folder_vim_obj = datacenter_vim_obj.vmFolder
 
-        config_spec = create_config_spec()
-        config_spec.name = name
-        files = vim.vm.FileInfo()
-        files.vmPathName = f"[{datastore.name}]"
-        config_spec.files = files
+        config_spec = create_config_spec(name, datastore, annotation, memory_size, guest_id, num_cpus)
 
         task = vm_folder_vim_obj.CreateVm(config_spec, resource_pool_vim_obj,
                                           self.vim_obj)
