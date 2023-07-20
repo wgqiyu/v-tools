@@ -9,7 +9,19 @@ app = typer.Typer()
 console = Console()
 
 
-def check_criteria(vim_obj: str, by: str, pattern: str):
+def _connect():
+    with open("connection_config.txt", "r") as config_file:
+        lines = config_file.readlines()
+        if len(lines) >= 3:
+            esxi = ESXi(ip=lines[0].strip(), user=lines[1].strip(), pwd=lines[2].strip())
+            console.print("+++++++++++++++++++++ Connected to ESXi ++++++++++++++++++++++++")
+            return esxi
+        else:
+            console.print("Invalid config file. Need to use change-connection-config command.")
+            return None
+
+
+def check_criteria(esxi: ESXi, vim_obj: str, by: str, pattern: str):
     if vim_obj == "vm":
         if by is None:
             return esxi.list_vm()
@@ -29,8 +41,11 @@ def check_criteria(vim_obj: str, by: str, pattern: str):
 @app.command()
 def list_vm(by: Annotated[str, typer.Option(help="The criteria for searching VMs")] = None,
             pattern: Annotated[str, typer.Option(help="The pattern of VM to search for")] = None):
+    esxi = _connect()
+    if esxi is None:
+        return
     table = Table(show_header=True, header_style="bold magenta")
-    vm_list = check_criteria("vm", by, pattern)
+    vm_list = check_criteria(esxi, "vm", by, pattern)
     table.add_column("Vm Name", style="dim")
     table.add_column("Path", style="dim")
     table.add_column("Power State", style="dim")
@@ -44,8 +59,11 @@ def list_vm(by: Annotated[str, typer.Option(help="The criteria for searching VMs
 @app.command()
 def list_datastore(by: Annotated[str, typer.Option(help="The criteria for searching Datastore")] = None,
                    pattern: Annotated[str, typer.Option(help="The pattern of Datastore to search for")] = None):
+    esxi = _connect()
+    if esxi is None:
+        return
     table = Table(show_header=True, header_style="bold magenta")
-    ds_list = check_criteria("datastore", by, pattern)
+    ds_list = check_criteria(esxi, "datastore", by, pattern)
     table.add_column("Datastore Name", style="dim", width=40)
     table.add_column("Type", style="dim", width=8)
     for ds in ds_list:
@@ -60,6 +78,9 @@ def create_vm(name: Annotated[str, typer.Argument(help="The name of VM to create
               memory_size: Annotated[int, typer.Option(help="The size of VM memory ")] = 128,
               guest_id: Annotated[str, typer.Option(help="Short guest OS identifier")] = 'otherGuest',
               num_cpus: Annotated[int, typer.Option(help="The number of CPUs of the VM")] = 1):
+    esxi = _connect()
+    if esxi is None:
+        return
     console.print(esxi.create_vm(name=name,
                                  datastore=esxi.get_datastore(lambda ds: ds.name == datastore),
                                  annotation=annotation,
@@ -70,12 +91,18 @@ def create_vm(name: Annotated[str, typer.Argument(help="The name of VM to create
 
 @app.command()
 def destroy_vm(pattern: Annotated[str, typer.Argument(help="The name of VM to destroy")]):
+    esxi = _connect()
+    if esxi is None:
+        return
     esxi.delete_vm(vm=esxi.get_vm(lambda vm: vm.name == pattern))
     console.print("Done")
 
 
 @app.command()
 def power_on(name: Annotated[str, typer.Argument(help="The name VM to power on")]):
+    esxi = _connect()
+    if esxi is None:
+        return
     vm_obj = esxi.get_vm(lambda vm: vm.name == name)
     if format(vm_obj.vim_obj.runtime.powerState) != "poweredOn":
         console.print(f"{vm_obj.name} is already powered on")
@@ -86,6 +113,9 @@ def power_on(name: Annotated[str, typer.Argument(help="The name VM to power on")
 
 @app.command()
 def power_off(name: Annotated[str, typer.Argument(help="The name VM to power off")]):
+    esxi = _connect()
+    if esxi is None:
+        return
     vm_obj = esxi.get_vm(lambda vm: vm.name == name)
     if format(vm_obj.vim_obj.runtime.powerState) != "poweredOff":
         vm_obj.power_off()
@@ -96,6 +126,9 @@ def power_off(name: Annotated[str, typer.Argument(help="The name VM to power off
 
 @app.command()
 def suspend(name: Annotated[str, typer.Argument(help="The name VM to suspend")]):
+    esxi = _connect()
+    if esxi is None:
+        return
     vm_obj = esxi.get_vm(lambda vm: vm.name == name)
     if format(vm_obj.vim_obj.runtime.powerState) == "poweredOn":
         vm_obj.suspend()
@@ -106,6 +139,9 @@ def suspend(name: Annotated[str, typer.Argument(help="The name VM to suspend")])
 
 @app.command()
 def list_snapshot(name: Annotated[str, typer.Argument(help="The name of VM to list its snapshots")]):
+    esxi = _connect()
+    if esxi is None:
+        return
     vm_obj = esxi.get_vm(lambda vm: vm.name == name)
     snapshots = vm_obj.list_snapshot()
     table = Table(show_header=True, header_style="bold magenta")
@@ -119,6 +155,9 @@ def list_snapshot(name: Annotated[str, typer.Argument(help="The name of VM to li
 @app.command()
 def create_snapshot(snapshot_name: Annotated[str, typer.Argument(help="The name of snapshot")],
                     name: Annotated[str, typer.Argument(help="The VM to take the snapshot")]):
+    esxi = _connect()
+    if esxi is None:
+        return
     vm_obj = esxi.get_vm(lambda vm: vm.name == name)
     snapshot = vm_obj.create_snapshot(name=snapshot_name, description="This is a test for snapshot")
     if snapshot:
@@ -129,6 +168,9 @@ def create_snapshot(snapshot_name: Annotated[str, typer.Argument(help="The name 
 @app.command()
 def destroy_snapshot(snapshot_name: Annotated[str, typer.Argument(help="The snapshot to destroy")],
                      name: Annotated[str, typer.Argument(help="The VM corresponding to the snapshot")]):
+    esxi = _connect()
+    if esxi is None:
+        return
     vm_obj = esxi.get_vm(lambda vm: vm.name == name)
     if vm_obj.destroy_snapshot(snapshot_name):
         console.print(f"Snapshot '{snapshot_name}' of {vm_obj.name} is destroyed")
@@ -138,16 +180,69 @@ def destroy_snapshot(snapshot_name: Annotated[str, typer.Argument(help="The snap
 def import_ovf(name: Annotated[str, typer.Argument(help="The name VM to import")],
                datastore: Annotated[str, typer.Argument(help="The datastore to import to")],
                ovf_url: Annotated[str, typer.Argument(help="The ovf file url")]):
+    esxi = _connect()
+    if esxi is None:
+        return
     esxi.import_ovf(name=name,
                     datastore=esxi.get_datastore(lambda ds: ds.name == datastore),
                     ovf_url=ovf_url)
 
 
 @app.command()
+def list_disk(vm_name: Annotated[str, typer.Argument(help="The name VM to list disk")]):
+    esxi = _connect()
+    if esxi is None:
+        return
+    vm_obj = esxi.get_vm(lambda vm: vm.name == vm_name)
+    disks = vm_obj.list_disks()
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Disk Name", style="dim")
+    table.add_column("Disk Size", style="dim")
+    for disk in disks:
+        table.add_row(disk.name, disk.size)
+    console.print(table)
+
+
+@app.command()
+def add_disk(vm_name: Annotated[str, typer.Argument(help="The name VM to add disk")],
+             disk_size: Annotated[int, typer.Argument(help="The size (in GB) of the disk to add")],
+             disk_type: Annotated[str, typer.Argument(help="The type of the disk")] = 'thin'):
+    esxi = _connect()
+    if esxi is None:
+        return
+    vm_obj = esxi.get_vm(lambda vm: vm.name == vm_name)
+    if vm_obj:
+        vm_obj.add_disk(disk_size, disk_type)
+        console.print("A %sGB disk is added to the %s" % (disk_size, vm_obj.vim_obj.config.name))
+
+
+@app.command()
+def remove_disk(vm_name: Annotated[str, typer.Argument(help="The name VM to remove disk")],
+                disk_num: Annotated[int, typer.Argument(help="The name VM to remove disk")]):
+    esxi = _connect()
+    if esxi is None:
+        return
+    vm_obj = esxi.get_vm(lambda vm: vm.name == vm_name)
+    if vm_obj:
+        vm_obj.remove_disk(disk_num)
+        console.print("The disk %s is removed from %s" % (disk_num, vm_obj.vim_obj.config.name))
+
+
+@app.command()
+def add_scsi_controller(vm_name: Annotated[str, typer.Argument(help="The name VM to add controller")]):
+    esxi = _connect()
+    if esxi is None:
+        return
+    vm_obj = esxi.get_vm(lambda vm: vm.name == vm_name)
+    if vm_obj:
+        vm_obj.add_scsi_controller()
+
+
+@app.command()
 def check_connection_config():
     with open("connection_config.txt", "r") as file:
         info = file.readlines()
-        if len(lines) >= 3:
+        if len(info) >= 3:
             console.print(f'ip={info[0].strip()}')
             console.print(f'user={info[1].strip()}')
             console.print(f'pwd={info[2].strip()}\n')
@@ -173,17 +268,9 @@ def change_connection_config(ip: Annotated[str, typer.Option(help="The host ip t
 
 
 if __name__ == "__main__":
-    with open("connection_config.txt", "r") as config_file:
-        lines = config_file.readlines()
-        if len(lines) >= 3:
-            esxi = ESXi(ip=lines[0].strip(), user=lines[1].strip(), pwd=lines[2].strip())
-            console.print("+++++++++++++++++++++ Connected to ESXi ++++++++++++++++++++++++")
-        else:
-            console.print("Invalid config file. Need to use change-connection-config command.")
     app()
 
     # esxi = ESXi(ip="10.161.162.8", user="root", pwd="CSEQz4d+r8jeM*lS")
-
     # esxi.import_ovf(name='win11_vm',
     #                 datastore=esxi.get_datastore(
     #                     lambda datastore: datastore.name == 'local-0'),

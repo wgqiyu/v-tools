@@ -82,6 +82,20 @@ def create_config_spec(name: str,
     return config_spec
 
 
+def create_disk_spec(disk_size: int, disk_type: str) -> vim.vm.device.VirtualDeviceSpec:
+    disk_in_kb = int(disk_size) * 1024 * 1024
+    disk_spec = vim.vm.device.VirtualDeviceSpec()
+    disk_spec.fileOperation = "create"
+    disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+    disk_spec.device = vim.vm.device.VirtualDisk()
+    disk_spec.device.backing = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
+    if disk_type == 'thin':
+        disk_spec.device.backing.thinProvisioned = True
+    disk_spec.device.backing.diskMode = 'persistent'
+    disk_spec.device.capacityInKB = disk_in_kb
+    return disk_spec
+
+
 def create_import_spec(
     content: vim.ServiceInstanceContent,
     ovf_url: str,
@@ -231,6 +245,91 @@ class VM:
             return name
         else:
             print("The VM you designated does not exist")
+
+    def add_scsi_controller(self):
+        spec = vim.vm.ConfigSpec()
+        scsi_ctr = vim.vm.device.VirtualDeviceSpec()
+        scsi_ctr.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        scsi_ctr.device = vim.vm.device.ParaVirtualSCSIController()
+        scsi_ctr.device.busNumber = 1
+        scsi_ctr.device.hotAddRemove = True
+        scsi_ctr.device.sharedBus = 'noSharing'
+        scsi_ctr.device.scsiCtlrUnitNumber = 7
+        spec.deviceChange = [scsi_ctr]
+        task = self.vim_obj.ReconfigVM_Task(spec=spec)
+        WaitForTask(task)
+        print(f"Added ParaVirtualSCSIController to {self.name}")
+
+    def list_disks(self):
+        disks = []
+        devices = self.vim_obj.config.hardware.device
+        if devices is not None:
+            for device in devices:
+                if isinstance(device, vim.vm.device.VirtualDisk) \
+                        or isinstance(device, vim.vm.device.ParaVirtualSCSIController):
+                    disks.append(Disk(device))
+            return disks
+        else:
+            print(f"There is no disks yet on {self.name}")
+            return disks
+
+    def add_disk(self, disk_size: int, disk_type: str):
+        spec = vim.vm.ConfigSpec()
+        unit_number = 0
+        controller = None
+        for device in self.vim_obj.config.hardware.device:
+            if isinstance(device, vim.vm.device.VirtualSCSIController):
+                controller = device
+                unit_number += 1
+            if hasattr(device.backing, 'fileName'):
+                unit_number = int(device.unitNumber) + 1
+                if unit_number >= 16:
+                    print("we don't support this many disks")
+                    return
+        if controller is None:
+            print("Disk SCSI controller not found!")
+            return
+        disk_spec = create_disk_spec(disk_size, disk_type)
+        disk_spec.device.unitNumber = unit_number
+        disk_spec.device.controllerKey = controller.key
+        spec.deviceChange = [disk_spec]
+        task = self.vim_obj.ReconfigVM_Task(spec=spec)
+        WaitForTask(task)
+        return Disk(task.info.result)
+
+    def remove_disk(self, disk_num: int, disk_prefix_label='Hard disk '):
+        disk_label = disk_prefix_label + str(disk_num)
+        # Find the disk device
+        virtual_disk_device = None
+        for device in self.vim_obj.config.hardware.device:
+            if isinstance(device, vim.vm.device.VirtualDisk) and device.deviceInfo.label == disk_label:
+                virtual_disk_device = device
+        if not virtual_disk_device:
+            raise RuntimeError(f'Virtual {disk_label} could not be found.')
+
+        spec = vim.vm.ConfigSpec()
+        disk_spec = vim.vm.device.VirtualDeviceSpec()
+        disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
+        disk_spec.device = virtual_disk_device
+        dev_changes = [disk_spec]
+        spec.deviceChange = dev_changes
+        WaitForTask(self.vim_obj.ReconfigVM_Task(spec=spec))
+
+
+class Disk:
+    def __init__(self, vim_obj: vim.vm.device.VirtualDevice) -> None:
+        self.vim_obj = vim_obj
+
+    @property
+    def name(self) -> str:
+        return self.vim_obj.deviceInfo.label
+
+    @property
+    def size(self) -> str:
+        return self.vim_obj.deviceInfo.summary
+
+    def __repr__(self):
+        return f'Disk(name={self.name}, description={self.size})'
 
 
 class Snapshot:
