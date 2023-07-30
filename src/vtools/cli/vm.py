@@ -1,3 +1,5 @@
+import sys
+
 import typer
 from rich.console import Console
 from rich.markup import escape
@@ -11,14 +13,13 @@ app = typer.Typer()
 console = Console()
 
 
-@app.command('list')
+@app.command(name='list', help='List all the VMs on the host ESXi')
 def query(
     field: Annotated[str, typer.Option(help="The field to filter on")] = None,
     condition: Annotated[str, typer.Option(help="The condition to apply")] = None
 ):
     if (field is None) ^ (condition is None):
-        raise typer.BadParameter(
-            "Both 'field' and 'condition' need to be provided together")
+        raise typer.BadParameter("Both 'field' and 'condition' need to be provided together")
 
     esxi = connect()
 
@@ -33,6 +34,64 @@ def query(
     for vm in vm_list:
         table.add_row(vm.name, escape(vm.path), vm.power_state)
     console.print(table)
+
+
+@app.command(name='power_on', help='Power on the VM')
+def power_on(vm_name: Annotated[str, typer.Argument(help="The name VM to power on")]):
+    esxi = connect()
+    vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
+    vm_obj.power_on()
+
+
+@app.command(name='power_off', help='Power off the VM')
+def power_on(vm_name: Annotated[str, typer.Argument(help="The name VM to power off")]):
+    esxi = connect()
+    vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
+    vm_obj.power_off()
+
+
+@app.command(name='suspend', help='Suspend the VM')
+def power_on(vm_name: Annotated[str, typer.Argument(help="The name VM to suspend")]):
+    esxi = connect()
+    vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
+    vm_obj.suspend()
+
+
+@app.command(name='create', help='Create a new VM')
+def create_vm(vm_name: Annotated[str, typer.Argument(help="The name of VM to create")],
+              datastore: Annotated[str, typer.Option(help="The place to store the VM created")] = 'datastore1',
+              annotation: Annotated[str, typer.Option(help="Description of the VM")] = 'Sample',
+              memory_size: Annotated[int, typer.Option(help="The size of VM memory ")] = 128,
+              guest_id: Annotated[str, typer.Option(help="Short guest OS identifier")] = 'otherGuest',
+              num_cpus: Annotated[int, typer.Option(help="The number of CPUs of the VM")] = 1):
+    esxi = connect()
+    console.print(esxi.vm_manager().create(name=vm_name,
+                                           datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore),
+                                           annotation=annotation,
+                                           memory_size=memory_size,
+                                           guest_id=guest_id,
+                                           num_cpus=num_cpus))
+
+
+@app.command(name='delete', help='Delete a VM')
+def delete_vm(vm_name: Annotated[str, typer.Argument(help="The name of VM to destroy")]):
+    esxi = connect()
+    vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
+    if vm_obj is None:
+        print(f"The VM '{vm_name}' does not exists!")
+        sys.exit()
+    esxi.vm_manager().delete(vm_obj)
+    console.print(f"Deleted {vm_name}")
+
+
+@app.command()
+def import_ovf(name: Annotated[str, typer.Argument(help="The name VM to import")],
+               ovf_url: Annotated[str, typer.Argument(help="The ovf file url")],
+               datastore_name: Annotated[str, typer.Option(help="The datastore to import to")] = "datastore1"):
+    esxi = connect()
+    esxi.import_ovf(name=name,
+                    datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore_name),
+                    ovf_url=ovf_url)
 
 
 if __name__ == "__main__":
