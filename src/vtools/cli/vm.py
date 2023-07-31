@@ -63,14 +63,27 @@ def create_vm(vm_name: Annotated[str, typer.Argument(help="The name of VM to cre
               annotation: Annotated[str, typer.Option(help="Description of the VM")] = 'Sample',
               memory_size: Annotated[int, typer.Option(help="The size of VM memory ")] = 128,
               guest_id: Annotated[str, typer.Option(help="Short guest OS identifier")] = 'otherGuest',
-              num_cpus: Annotated[int, typer.Option(help="The number of CPUs of the VM")] = 1):
+              num_cpus: Annotated[int, typer.Option(help="The number of CPUs of the VM")] = 1,
+              import_ovf: Annotated[bool, typer.Option(help="Choose to import ovf file, must provide ovf url")] = False,
+              ovf_url: Annotated[str, typer.Option(help="The ovf file url")] = None):
+
+    if not import_ovf ^ (ovf_url is None):
+        raise typer.BadParameter("Both 'import_ovf' and 'ovf_url' need to be provided together")
+
     esxi = connect()
-    console.print(esxi.vm_manager().create(name=vm_name,
-                                           datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore),
-                                           annotation=annotation,
-                                           memory_size=memory_size,
-                                           guest_id=guest_id,
-                                           num_cpus=num_cpus))
+
+    if import_ovf:
+        console.print(f"The input ovf url is '{ovf_url}'")
+        esxi.vm_manager().import_ovf(name=vm_name,
+                                     datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore),
+                                     ovf_url=ovf_url)
+    else:
+        console.print(esxi.vm_manager().create(name=vm_name,
+                                               datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore),
+                                               annotation=annotation,
+                                               memory_size=memory_size,
+                                               guest_id=guest_id,
+                                               num_cpus=num_cpus))
 
 
 @app.command(name='delete', help='Delete a VM')
@@ -82,16 +95,14 @@ def delete_vm(vm_name: Annotated[str, typer.Argument(help="The name of VM to des
         sys.exit()
     esxi.vm_manager().delete(vm_obj)
     console.print(f"Deleted {vm_name}")
-
-
-@app.command()
-def import_ovf(name: Annotated[str, typer.Argument(help="The name VM to import")],
-               ovf_url: Annotated[str, typer.Argument(help="The ovf file url")],
-               datastore_name: Annotated[str, typer.Option(help="The datastore to import to")] = "datastore1"):
-    esxi = connect()
-    esxi.import_ovf(name=name,
-                    datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore_name),
-                    ovf_url=ovf_url)
+# @app.command(name='import_ovf', help='import an ovf file to the ESXi Host')
+# def import_ovf(name: Annotated[str, typer.Argument(help="The name of the imported VM")],
+#                ovf_url: Annotated[str, typer.Argument(help="The ovf file url")],
+#                datastore_name: Annotated[str, typer.Option(help="The datastore to import to")] = "datastore1"):
+#     esxi = connect()
+#     esxi.import_ovf(name=name,
+#                     datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore_name),
+#                     ovf_url=ovf_url)
 
 
 if __name__ == "__main__":

@@ -99,7 +99,7 @@ class VMManager(QueryMixin[VM]):
         task = vm.vim_obj.ReconfigVM_Task(spec=spec)
         WaitForTask(task)
 
-    def import_ovf(self, name: str, datastore: Datastore, ovf_url: str) -> VM:
+    def import_ovf(self, name: str, datastore: Datastore, ovf_url: str):
         resource_pool_vim_obj = self.esxi.vim_obj.parent.resourcePool
         datacenter_vim_obj = get_first_vim_obj(self.esxi._content, vim.Datacenter)
         vm_folder_vim_obj = datacenter_vim_obj.vmFolder

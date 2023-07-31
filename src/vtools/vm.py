@@ -150,7 +150,8 @@ class DiskManager(QueryMixin[Disk]):
         self.vm_obj = vm_obj
 
     def _list_all(self) -> List[Disk]:
-        return [Disk(disk_vm_obj) for disk_vm_obj in self.vm_obj.vim_obj.config.hardware.device
+        return [Disk(disk_vm_obj) for disk_vm_obj
+                in self.vm_obj.vim_obj.config.hardware.device
                 if isinstance(disk_vm_obj, vim.vm.device.VirtualDisk) or
                 isinstance(disk_vm_obj, vim.vm.device.ParaVirtualSCSIController)]
 

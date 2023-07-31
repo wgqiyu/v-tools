@@ -1,3 +1,4 @@
+import sys
 from typing import (
     List,
     Optional,
@@ -112,7 +113,11 @@ def create_import_spec(
     vm_name: str = None,
     disk_provisioning: str = None
 ) -> vim.OvfManager.CreateImportSpecResult:
-    response = requests.get(ovf_url)
+    try:
+        response = requests.get(ovf_url)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit()
     response.encoding = "utf-8"
     ovf_descriptor = response.text
 
