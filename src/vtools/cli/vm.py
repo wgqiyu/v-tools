@@ -6,17 +6,24 @@ from rich.markup import escape
 from rich.table import Table
 from typing_extensions import Annotated
 
+from vtools.cli import (
+    disk,
+    snapshot
+)
+
 from vtools.cli.config import connect
 from vtools.query import by
 
 app = typer.Typer()
 console = Console()
+app.add_typer(disk.app, name="disk", help="Operations related to Disk")
+app.add_typer(snapshot.app, name="snapshot", help="Operations related to Snapshot")
 
 
 @app.command(name='list', help='List all the VMs on the host ESXi')
 def query(
     field: Annotated[str, typer.Option(help="The field to filter on")] = None,
-    condition: Annotated[str, typer.Option(help="The condition to apply")] = None
+    condition: Annotated[str, typer.Option(help="The condition to apply, i.e. lambda val: val == 'vm1'")] = None
 ):
     if (field is None) ^ (condition is None):
         raise typer.BadParameter("Both 'field' and 'condition' need to be provided together")
@@ -28,11 +35,14 @@ def query(
         vm_list = esxi.vm_manager().list()
     else:
         vm_list = esxi.vm_manager().list(by(field, eval(condition)))
-    table.add_column("Vm Name", style="dim", width=12)
-    table.add_column("Path", style="dim", width=40)
-    table.add_column("Power State", style="dim", width=12)
+    table.add_column("Vm Name", style="dim")
+    table.add_column("Primary IP", style="dim")
+    table.add_column("Path", style="dim")
+    table.add_column("Power State", style="dim")
+    table.add_column("Memory", style="dim")
+    table.add_column("CPUs", style="dim")
     for vm in vm_list:
-        table.add_row(vm.name, escape(vm.path), vm.power_state)
+        table.add_row(vm.name, vm.primary_ip, escape(vm.path), vm.power_state, str(vm.memory), str(vm.num_cpus))
     console.print(table)
 
 
@@ -86,6 +96,32 @@ def create_vm(vm_name: Annotated[str, typer.Argument(help="The name of VM to cre
                                                num_cpus=num_cpus))
 
 
+@app.command(name='edit', help='Edit an existing VM')
+def edit_vm(vm_name: Annotated[str, typer.Argument(help="The VM to edit")],
+            new_name: Annotated[str, typer.Option(help="The new name of VM to edit")] = None,
+            datastore: Annotated[str, typer.Option(help="The place to store the VM created")] = "datastore1",
+            annotation: Annotated[str, typer.Option(help="Description of the VM")] = None,
+            memory_size: Annotated[int, typer.Option(help="The size of VM memory ")] = None,
+            guest_id: Annotated[str, typer.Option(help="Short guest OS identifier")] = None,
+            num_cpus: Annotated[int, typer.Option(help="The number of CPUs of the VM")] = None):
+    esxi = connect()
+    vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
+    if vm_obj is None:
+        print(f"The VM '{vm_name}' does not exists!")
+        sys.exit()
+    config = vm_obj.vim_obj.config
+
+    info = esxi.vm_manager().edit(vm=vm_obj,
+                                  new_name=new_name if new_name else config.name,
+                                  datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore),
+                                  annotation=annotation if annotation else config.annotation,
+                                  memory_size=memory_size if memory_size else config.memorySizeMB,
+                                  guest_id=guest_id if guest_id else config.guestId,
+                                  num_cpus=num_cpus if num_cpus else config.numCpu)
+
+    console.print(f"Reconfigured {vm_name} to {info}")
+
+
 @app.command(name='delete', help='Delete a VM')
 def delete_vm(vm_name: Annotated[str, typer.Argument(help="The name of VM to destroy")]):
     esxi = connect()
@@ -95,14 +131,6 @@ def delete_vm(vm_name: Annotated[str, typer.Argument(help="The name of VM to des
         sys.exit()
     esxi.vm_manager().delete(vm_obj)
     console.print(f"Deleted {vm_name}")
-# @app.command(name='import_ovf', help='import an ovf file to the ESXi Host')
-# def import_ovf(name: Annotated[str, typer.Argument(help="The name of the imported VM")],
-#                ovf_url: Annotated[str, typer.Argument(help="The ovf file url")],
-#                datastore_name: Annotated[str, typer.Option(help="The datastore to import to")] = "datastore1"):
-#     esxi = connect()
-#     esxi.import_ovf(name=name,
-#                     datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore_name),
-#                     ovf_url=ovf_url)
 
 
 if __name__ == "__main__":

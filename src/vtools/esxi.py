@@ -6,6 +6,7 @@ from typing import (
 from pyVim.connect import SmartConnect
 from pyVmomi import vim
 
+from vtools.exception import handle_exceptions
 from vtools.vsphere import get_first_vim_obj, create_config_spec, create_http_nfc_lease,\
     deploy_vm_with_pull_mode, create_import_spec
 from vtools.query import QueryMixin
@@ -27,20 +28,12 @@ class ESXi:
 
         self._login()
 
+    @handle_exceptions()
     def _login(self) -> None:
-        try:
-            self._si = SmartConnect(host=self.ip,
-                                    user=self.user,
-                                    pwd=self.pwd,
-                                    disableSslCertValidation=True)
-        except vim.fault.InvalidLogin as e:
-            print(f"ERROR: {e.msg} Please set the correct username or password using the command below:")
-            print(f"\tpython main.py config set --ip <HostIP> --user <username> --pwd <password>")
-            sys.exit()
-        except Exception as e:
-            print(f"ERROR: {e}. Please set a valid VIM server using the command below:")
-            print(f"\tpython main.py config set --ip <HostIP> --user <username> --pwd <password>")
-            sys.exit()
+        self._si = SmartConnect(host=self.ip,
+                                user=self.user,
+                                pwd=self.pwd,
+                                disableSslCertValidation=True)
         self._content = self._si.RetrieveContent()
         self.vim_obj = get_first_vim_obj(content=self._content,
                                          vim_type=vim.HostSystem)
@@ -77,6 +70,28 @@ class VMManager(QueryMixin[VM]):
         WaitForTask(task)
 
         return VM(task.info.result)
+
+    def edit(self,
+             vm: VM,
+             new_name: str,
+             datastore: vim.Datastore,
+             annotation: str,
+             memory_size: int,
+             guest_id: str,
+             num_cpus: int) -> VM:
+        if vm.power_state != "poweredOff":
+            print(f"The current state of the VM is {vm.power_state}, please turn off the VM to edit it.")
+            sys.exit()
+        config_spec = create_config_spec(new_name, datastore, annotation, memory_size, guest_id, num_cpus)
+        task = vm.vim_obj.Reconfigure(config_spec)
+        WaitForTask(task)
+
+        if new_name:
+            new_vm_obj = self.get(lambda _vm: _vm.name == new_name)
+        else:
+            new_vm_obj = self.get(lambda _vm: _vm.name == vm.name)
+
+        return new_vm_obj
 
     def delete(self, vm: VM) -> None:
         if format(vm.vim_obj.runtime.powerState) != "poweredOff":

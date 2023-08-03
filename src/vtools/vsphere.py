@@ -1,4 +1,3 @@
-import sys
 from typing import (
     List,
     Optional,
@@ -7,6 +6,8 @@ from typing import (
 
 from pyVmomi import vim
 from pyVmomi.VmomiSupport import ManagedObject
+
+from vtools.exception import handle_exceptions
 from vtools.snapshot import Snapshot
 from pyVim.task import WaitForTask
 
@@ -105,6 +106,7 @@ def list_snapshots_recursively(snapshot_data, snapshots):
     return snapshot_data
 
 
+@handle_exceptions()
 def create_import_spec(
     content: vim.ServiceInstanceContent,
     ovf_url: str,
@@ -113,11 +115,8 @@ def create_import_spec(
     vm_name: str = None,
     disk_provisioning: str = None
 ) -> vim.OvfManager.CreateImportSpecResult:
-    try:
-        response = requests.get(ovf_url)
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit()
+
+    response = requests.get(ovf_url)
     response.encoding = "utf-8"
     ovf_descriptor = response.text
 

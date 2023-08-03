@@ -30,6 +30,18 @@ class VM:
         return self.vim_obj.summary.config.name
 
     @property
+    def primary_ip(self) -> str:
+        return self.vim_obj.guest.ipAddress
+
+    @property
+    def ips(self) -> List[str]:
+        return [
+            nic_ip.ipAddress
+            for nic_info in self.vim_obj.guest.net
+            for nic_ip in nic_info.ipConfig.ipAddress
+        ]
+
+    @property
     def path(self) -> str:
         return self.vim_obj.summary.config.vmPathName
 
@@ -46,7 +58,8 @@ class VM:
         return self.vim_obj.summary.config.numCpu
 
     def __repr__(self) -> str:
-        return f'VM(vim_obj={self.vim_obj!r}, name={self.name}, memory={self.memory}, num_cpus={self.num_cpus})'
+        return f'VM(vim_obj={self.vim_obj!r}, name={self.name}, ip={self.ips}, ' \
+               f'memory={self.memory}, num_cpus={self.num_cpus})'
 
     def power_on(self) -> None:
         self._invoke_power_on()
