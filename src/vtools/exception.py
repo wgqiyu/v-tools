@@ -10,7 +10,14 @@ def handle_exceptions():
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except gaierror or ConnectionRefusedError as e:
+            except KeyError as e:
+                print(f"Exception occurred: {e}")
+                print("Please set a config file using the command:")
+                print("vtools-cli config set --ip <HostIP> --user <username> --pwd <password>")
+            except ConnectionRefusedError as e:
+                print(f"Exception occurred: {e}")
+                print("Please check if the network connection and if the IP address is valid and try again.")
+            except gaierror as e:
                 print(f"Exception occurred: {e}")
                 print("Please check if the network connection and if the IP address is valid and try again.")
             except vim.fault.InvalidLogin as e:

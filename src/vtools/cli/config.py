@@ -11,15 +11,17 @@ CONFIG_FILE = os.path.expanduser("~/.vtools_config")
 app = typer.Typer()
 console = Console()
 
+config = configparser.ConfigParser()
+config.read(CONFIG_FILE)
+pre = True if config.has_section("CONNECTION") else False
+
 
 @app.command(name='set', help='For setting a connection config.')
 def set_config(
-    ip: Annotated[str, typer.Option(help="Host IP", prompt=True)] = '',
-    user: Annotated[str, typer.Option(help="User name", prompt=True)] = 'root',
-    pwd: Annotated[str, typer.Option(help="Password", prompt=True)] = ''
+    ip: Annotated[str, typer.Option(help="Host IP", prompt=True)] = config['CONNECTION'].get('ip') if pre else '',
+    user: Annotated[str, typer.Option(help="User name", prompt=True)] = config['CONNECTION'].get('user') if pre else '',
+    pwd: Annotated[str, typer.Option(help="Password", prompt=True)] = config['CONNECTION'].get('pwd') if pre else ''
 ):
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
     config['CONNECTION'] = {'ip': ip, 'user': user, 'pwd': pwd}
     with open(CONFIG_FILE, "w") as config_file:
         config.write(config_file)
@@ -27,9 +29,7 @@ def set_config(
 
 @app.command(name='get', help='For getting the current connection config.')
 def get_config():
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    if not config.has_section("CONNECTION"):
+    if not pre:
         console.print("Connection configuration not set.")
         console.print("Please use command 'vtools-cli config set --ip <HostIP> --user <username> --pwd <password>'")
         return
@@ -41,8 +41,6 @@ def get_config():
 
 @handle_exceptions()
 def connect():
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
     connection_config = config['CONNECTION']
     return ESXi(
         ip=connection_config.get('ip'),
