@@ -69,7 +69,7 @@ def power_on(vm_name: Annotated[str, typer.Argument(help="The name VM to suspend
 
 @app.command(name='create', help='Create a new VM')
 def create_vm(vm_name: Annotated[str, typer.Argument(help="The name of VM to create")],
-              datastore: Annotated[str, typer.Option(help="The place to store the VM created")] = 'datastore1',
+              ds: Annotated[str, typer.Option(help="The place to store the VM created")] = 'datastore1',
               annotation: Annotated[str, typer.Option(help="Description of the VM")] = 'Sample',
               memory_size: Annotated[int, typer.Option(help="The size of VM memory ")] = 128,
               guest_id: Annotated[str, typer.Option(help="Short guest OS identifier")] = 'otherGuest',
@@ -83,13 +83,13 @@ def create_vm(vm_name: Annotated[str, typer.Argument(help="The name of VM to cre
     esxi = connect()
 
     if import_ovf:
-        console.print(f"The input ovf url is '{ovf_url}'")
-        esxi.vm_manager().import_ovf(name=vm_name,
-                                     datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore),
-                                     ovf_url=ovf_url)
+        console.print(f"The input ovf url is '{ovf_url}'. This might takes 5~10 minutes...")
+        console.print(esxi.vm_manager().import_ovf(name=vm_name,
+                                                   datastore=esxi.datastore_manager().get(lambda _: _.name == ds),
+                                                   ovf_url=ovf_url))
     else:
         console.print(esxi.vm_manager().create(name=vm_name,
-                                               datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore),
+                                               datastore=esxi.datastore_manager().get(lambda _: _.name == ds),
                                                annotation=annotation,
                                                memory_size=memory_size,
                                                guest_id=guest_id,
@@ -115,9 +115,9 @@ def edit_vm(vm_name: Annotated[str, typer.Argument(help="The VM to edit")],
                                   new_name=new_name if new_name else config.name,
                                   datastore=esxi.datastore_manager().get(lambda ds: ds.name == datastore),
                                   annotation=annotation if annotation else config.annotation,
-                                  memory_size=memory_size if memory_size else config.memorySizeMB,
+                                  memory_size=memory_size if memory_size else config.hardware.memoryMB,
                                   guest_id=guest_id if guest_id else config.guestId,
-                                  num_cpus=num_cpus if num_cpus else config.numCpu)
+                                  num_cpus=num_cpus if num_cpus else config.hardware.numCPU)
 
     console.print(f"Reconfigured {vm_name} to {info}")
 

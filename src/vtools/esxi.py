@@ -111,6 +111,25 @@ class VMManager(QueryMixin[VM]):
         task = vm.vim_obj.ReconfigVM_Task(spec=spec)
         WaitForTask(task)
 
+    def remove_scsi_controller(self, vm: VM, disk_num: int, disk_prefix_label='SCSI controller '):
+        disk_label = disk_prefix_label + str(disk_num)
+        # Find the disk device
+        virtual_disk_device = None
+        for device in vm.vim_obj.config.hardware.device:
+            if isinstance(device, vim.vm.device.ParaVirtualSCSIController) and device.deviceInfo.label == disk_label:
+                virtual_disk_device = device
+        if not virtual_disk_device:
+            print(f"Virtual {disk_label} could not be found.")
+            sys.exit()
+        spec = vim.vm.ConfigSpec()
+        disk_spec = vim.vm.device.VirtualDeviceSpec()
+        disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
+        disk_spec.device = virtual_disk_device
+        dev_changes = [disk_spec]
+        spec.deviceChange = dev_changes
+        WaitForTask(vm.vim_obj.ReconfigVM_Task(spec=spec))
+
+    @handle_exceptions()
     def import_ovf(self, name: str, datastore: Datastore, ovf_url: str):
         resource_pool_vim_obj = self.esxi.vim_obj.parent.resourcePool
         datacenter_vim_obj = get_first_vim_obj(self.esxi._content, vim.Datacenter)
@@ -129,6 +148,8 @@ class VMManager(QueryMixin[VM]):
         deploy_vm_with_pull_mode(ovf_url, create_result, http_nfc_lease)
 
         http_nfc_lease.Complete()
+
+        return self.get(lambda vm: vm.name == name)
 
 
 class DatastoreManager(QueryMixin[Datastore]):

@@ -29,6 +29,19 @@ def add_scsi_controller(vm_name: Annotated[str, typer.Argument(help="The name VM
     console.print(f"Added ParaVirtualSCSIController to {vm_name}")
 
 
+@app.command(name='remove_controller', help='remove scsi controller for disk management')
+def remove_scsi_controller(vm_name: Annotated[str, typer.Argument(help="The name VM to remove controller")],
+                           controller_number: Annotated[int, typer.Argument(help="The name VM to remove disk")]):
+    esxi = connect()
+
+    vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
+    if vm_obj is None:
+        console.print(f"The VM '{vm_name}' does not exists!")
+        sys.exit()
+    esxi.vm_manager().remove_scsi_controller(vm_obj, controller_number)
+    console.print(f"Removed ParaVirtualSCSIController{controller_number} from {vm_name}")
+
+
 @app.command(name="list", help='List all the disks attached to a VM')
 def query_disk(
         vm_name: Annotated[str, typer.Argument(help="The name of the VM to list disk")],
