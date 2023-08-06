@@ -16,7 +16,7 @@ def list_snapshot(vm_name: Annotated[str, typer.Argument(help="The name of VM to
     esxi = connect()
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     if vm_obj is None:
-        print(f"The VM '{vm_name}' does not exists!")
+        console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
     table = Table(show_header=True, header_style="bold magenta")
     snapshots = vm_obj.snapshot_manager().list()
@@ -33,7 +33,7 @@ def create_snapshot(vm_name: Annotated[str, typer.Argument(help="The VM to take 
     esxi = connect()
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     if vm_obj is None:
-        print(f"The VM '{vm_name}' does not exists!")
+        console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
     snapshot = vm_obj.snapshot_manager().create_snapshot(name=snapshot_name, description=f"This is a test for {snapshot_name}")
     console.print(snapshot)
@@ -46,7 +46,7 @@ def destroy_snapshot(vm_name: Annotated[str, typer.Argument(help="The VM corresp
     esxi = connect()
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     if vm_obj is None:
-        print(f"The VM '{vm_name}' does not exists!")
+        console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
     if vm_obj.snapshot_manager().destroy_snapshot(snapshot_name):
         console.print(f"Snapshot '{snapshot_name}' of {vm_obj.name} is destroyed")

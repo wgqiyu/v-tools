@@ -86,10 +86,7 @@ class VMManager(QueryMixin[VM]):
         task = vm.vim_obj.Reconfigure(config_spec)
         WaitForTask(task)
 
-        if new_name:
-            new_vm_obj = self.get(lambda _vm: _vm.name == new_name)
-        else:
-            new_vm_obj = self.get(lambda _vm: _vm.name == vm.name)
+        new_vm_obj = self.get(lambda _: _.name == new_name) if new_name else self.get(lambda _: _.name == vm.name)
 
         return new_vm_obj
 

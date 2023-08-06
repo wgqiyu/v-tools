@@ -107,7 +107,7 @@ def edit_vm(vm_name: Annotated[str, typer.Argument(help="The VM to edit")],
     esxi = connect()
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     if vm_obj is None:
-        print(f"The VM '{vm_name}' does not exists!")
+        console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
     config = vm_obj.vim_obj.config
 
@@ -127,7 +127,7 @@ def delete_vm(vm_name: Annotated[str, typer.Argument(help="The name of VM to des
     esxi = connect()
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     if vm_obj is None:
-        print(f"The VM '{vm_name}' does not exists!")
+        console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
     esxi.vm_manager().delete(vm_obj)
     console.print(f"Deleted {vm_name}")

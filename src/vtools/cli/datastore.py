@@ -8,6 +8,7 @@ from vtools.query import by
 
 console = Console()
 app = typer.Typer()
+esxi = connect()
 
 
 @app.command(name='list', help='list all the Datastore on the host ESXi')
@@ -18,7 +19,7 @@ def query(
     if (field is None) ^ (condition is None):
         raise typer.BadParameter("Both 'field' and 'condition' need to be provided together")
 
-    esxi = connect()
+    # esxi = connect()
 
     table = Table(show_header=True, header_style="bold magenta")
     if field is None:

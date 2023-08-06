@@ -19,14 +19,14 @@ def add_scsi_controller(vm_name: Annotated[str, typer.Argument(help="The name VM
 
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     if vm_obj is None:
-        print(f"The VM '{vm_name}' does not exists!")
+        console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
     if [disk_vm_obj for disk_vm_obj in vm_obj.disk_manager().list()
             if isinstance(disk_vm_obj.vim_obj, vim.vm.device.ParaVirtualSCSIController)]:
-        print("An scsi controller already exists!")
+        console.print("An scsi controller already exists!")
         sys.exit()
     esxi.vm_manager().add_scsi_controller(vm_obj)
-    print(f"Added ParaVirtualSCSIController to {vm_name}")
+    console.print(f"Added ParaVirtualSCSIController to {vm_name}")
 
 
 @app.command(name="list", help='List all the disks attached to a VM')
@@ -42,7 +42,7 @@ def query_disk(
 
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     if vm_obj is None:
-        print(f"The VM '{vm_name}' does not exists!")
+        console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
 
     table = Table(show_header=True, header_style="bold magenta")
@@ -64,7 +64,7 @@ def add_disk(vm_name: Annotated[str, typer.Argument(help="The name of the VM to 
     esxi = connect()
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     if vm_obj is None:
-        print(f"The VM '{vm_name}' does not exists!")
+        console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
     vm_obj.disk_manager().add_disk(disk_size, disk_type)
     console.print("A %sGB disk is added to the %s" % (disk_size, vm_obj.vim_obj.config.name))
@@ -76,7 +76,7 @@ def remove_disk(vm_name: Annotated[str, typer.Argument(help="The name VM to remo
     esxi = connect()
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     if vm_obj is None:
-        print(f"The VM '{vm_name}' does not exists!")
+        console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
     vm_obj.disk_manager().remove_disk(disk_number)
     console.print("The disk %s is removed from %s" % (disk_number, vm_obj.vim_obj.config.name))

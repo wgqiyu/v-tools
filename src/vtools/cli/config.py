@@ -7,10 +7,10 @@ from rich.console import Console
 from vtools.esxi import ESXi
 from vtools.exception import handle_exceptions
 
-CONFIG_FILE = os.path.expanduser("~/.vtools_config")
 app = typer.Typer()
 console = Console()
 
+CONFIG_FILE = os.path.expanduser("~/.vtools_config")
 config = configparser.ConfigParser()
 config.read(CONFIG_FILE)
 pre = True if config.has_section("CONNECTION") else False
