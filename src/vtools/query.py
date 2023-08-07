@@ -31,8 +31,7 @@ class QueryMixin(Generic[T]):
 
         if condition is None:
             return all_items
-        return [item for item in all_items
-                if condition(item)]
+        return [item for item in all_items if condition(item)]
 
     def get(self, condition: Callable[[T], bool]) -> T:
         for item in self._list_all():
