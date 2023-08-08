@@ -47,3 +47,21 @@ def query(
     for cpu in cpu_list:
         table2.add_row(str(cpu.idx), cpu.description)
     console.print(table2)
+
+
+@app.command(name='edit', help='List the Memory Info of the VM')
+def edit(vm_name: Annotated[str, typer.Argument(help="The name of the VM to edit")],
+         num: Annotated[int, typer.Argument(help="The size of memory to change to")]):
+    esxi = connect()
+
+    vm_obj = esxi.vm_manager().get(lambda _: _.name == vm_name)
+    if vm_obj is None:
+        console.print(f"The VM '{vm_name}' does not exists!")
+        sys.exit()
+
+    vm_obj.cpu_manager().edit(num_cpus=num)
+    console.print(f"The number of CPUs in {vm_name} changes to {num}")
+
+
+if __name__ == "__main__":
+    app()

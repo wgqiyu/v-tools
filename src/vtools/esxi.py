@@ -65,7 +65,6 @@ class VMManager(QueryMixin[VM]):
         vm_folder_vim_obj = datacenter_vim_obj.vmFolder
 
         config_spec = create_config_spec(name, datastore, annotation, memory_size, guest_id, num_cpus)
-
         task = vm_folder_vim_obj.CreateVm(config_spec, resource_pool_vim_obj, self.esxi.vim_obj)
         WaitForTask(task)
 
@@ -80,14 +79,13 @@ class VMManager(QueryMixin[VM]):
              guest_id: str,
              num_cpus: int) -> VM:
         if vm.power_state != "poweredOff":
-            logger.info(f"The current state of the VM is {vm.power_state}, please turn off the VM to edit it.")
+            logger.error(f"The current state of the VM is {vm.power_state}, please turn off the VM first.")
             sys.exit()
+
         config_spec = create_config_spec(new_name, datastore, annotation, memory_size, guest_id, num_cpus)
         task = vm.vim_obj.Reconfigure(config_spec)
         WaitForTask(task)
-
         new_vm_obj = self.get(lambda _: _.name == new_name) if new_name else self.get(lambda _: _.name == vm.name)
-
         return new_vm_obj
 
     def delete(self, vm: VM) -> None:

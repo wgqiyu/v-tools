@@ -40,6 +40,18 @@ def create_snapshot(vm_name: Annotated[str, typer.Argument(help="The VM to take 
     console.print(f"Snapshot '{snapshot_name}' of {vm_obj.name} is created")
 
 
+@app.command(name='revert', help='revert the execution state of the VM to the state of this snapshot.')
+def revert_snapshot(vm_name: Annotated[str, typer.Argument(help="The VM to take the snapshot")],
+                    snapshot_name: Annotated[str, typer.Argument(help="The name of snapshot")]):
+    esxi = connect()
+    vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
+    if vm_obj is None:
+        console.print(f"The VM '{vm_name}' does not exists!")
+        sys.exit()
+    vm_obj.snapshot_manager().revert_snapshot(snapshot_name)
+    console.print(f"The VM {vm_name} is reverted to Snapshot {snapshot_name}'s state")
+
+
 @app.command(name='destroy', help='destroy a snapshot of the VM')
 def destroy_snapshot(vm_name: Annotated[str, typer.Argument(help="The VM corresponding to the snapshot")],
                      snapshot_name: Annotated[str, typer.Argument(help="The snapshot to destroy")]):

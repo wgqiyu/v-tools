@@ -84,7 +84,11 @@ def create_config_spec(name: str,
     return config_spec
 
 
-def create_disk_spec(disk_size: int, disk_type: str) -> vim.vm.device.VirtualDeviceSpec:
+def create_disk_spec(controller: vim.vm.device.VirtualSCSIController,
+                     unit_number: int,
+                     disk_size: int,
+                     disk_type: str) -> vim.vm.device.VirtualDeviceSpec:
+    spec = vim.vm.ConfigSpec()
     disk_in_kb = int(disk_size) * 1024 * 1024
     disk_spec = vim.vm.device.VirtualDeviceSpec()
     disk_spec.fileOperation = "create"
@@ -95,7 +99,43 @@ def create_disk_spec(disk_size: int, disk_type: str) -> vim.vm.device.VirtualDev
         disk_spec.device.backing.thinProvisioned = True
     disk_spec.device.backing.diskMode = 'persistent'
     disk_spec.device.capacityInKB = disk_in_kb
-    return disk_spec
+    disk_spec.device.unitNumber = unit_number
+    disk_spec.device.controllerKey = controller.key
+    spec.deviceChange = [disk_spec]
+    return spec
+
+
+def remove_disk_spec(virtual_disk_device: vim.vm.device.VirtualDisk):
+    spec = vim.vm.ConfigSpec()
+    disk_spec = vim.vm.device.VirtualDeviceSpec()
+    disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
+    disk_spec.device = virtual_disk_device
+    dev_changes = [disk_spec]
+    spec.deviceChange = dev_changes
+    return spec
+
+
+def create_controller_spec(bus_number: int):
+    spec = vim.vm.ConfigSpec()
+    scsi_ctr = vim.vm.device.VirtualDeviceSpec()
+    scsi_ctr.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+    scsi_ctr.device = vim.vm.device.ParaVirtualSCSIController()
+    scsi_ctr.device.busNumber = bus_number
+    scsi_ctr.device.hotAddRemove = True
+    scsi_ctr.device.sharedBus = 'noSharing'
+    scsi_ctr.device.scsiCtlrUnitNumber = 7
+    spec.deviceChange = [scsi_ctr]
+    return spec
+
+
+def remove_controller_spec(virtual_disk_device: vim.vm.device.ParaVirtualSCSIController):
+    spec = vim.vm.ConfigSpec()
+    disk_spec = vim.vm.device.VirtualDeviceSpec()
+    disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
+    disk_spec.device = virtual_disk_device
+    dev_changes = [disk_spec]
+    spec.deviceChange = dev_changes
+    return spec
 
 
 def list_snapshots_recursively(snapshot_data, snapshots):

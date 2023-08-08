@@ -10,7 +10,8 @@ from vtools.cli import (
     disk,
     snapshot,
     cpu,
-    controller
+    controller,
+    memory
 )
 
 from vtools.cli.config import connect
@@ -22,6 +23,7 @@ app.add_typer(disk.app, name="disk", help="Operations related to Disk")
 app.add_typer(controller.app, name="controller", help="Operations related to Controller")
 app.add_typer(snapshot.app, name="snapshot", help="Operations related to Snapshot")
 app.add_typer(cpu.app, name="cpu", help="Operations related to Cpu")
+app.add_typer(memory.app, name="memory", help="Operations related to Memory")
 
 
 @app.command(name='list', help='List all the VMs on the host ESXi')
@@ -48,11 +50,6 @@ def query(
     table.add_column("Memory", style="dim")
     table.add_column("CPUs", style="dim")
     for vm in vm_list:
-        # print(vm.vim_obj.runtime.host.hardware.memorySize)
-        # print(vm.vim_obj.runtime.host.hardware.memoryTierInfo)
-        # print(vm.vim_obj.runtime.host.hardware.memoryTieringType)
-        # print(vm.vim_obj.runtime.host.hardware.persistentMemoryInfo)
-        # print(vm.vim_obj.runtime.host.hardware.reliableMemoryInfo)
         table.add_row(vm.name, vm.primary_ip, escape(vm.path), vm.power_state, str(vm.memory), str(vm.num_cpus))
     console.print(table)
 
@@ -120,6 +117,7 @@ def edit_vm(vm_name: Annotated[str, typer.Argument(help="The VM to edit")],
     if vm_obj is None:
         console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
+
     config = vm_obj.vim_obj.config
 
     info = esxi.vm_manager().edit(vm=vm_obj,

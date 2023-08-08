@@ -50,7 +50,7 @@ def add_disk(vm_name: Annotated[str, typer.Argument(help="The name of the VM to 
         console.print(f"The VM '{vm_name}' does not exists!")
         sys.exit()
     if vm_obj.disk_manager().add_disk(disk_size, disk_type) is None:
-        console.print("Disk SCSI controller not found! Please use the below command:")
+        console.print("Please use the below command:")
         console.print("vtools-cli vm controller add_SCSI <vm_name>")
         sys.exit()
     console.print("A %sGB disk is added to the %s" % (disk_size, vm_obj.vim_obj.config.name))

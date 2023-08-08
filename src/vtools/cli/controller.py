@@ -63,3 +63,7 @@ def remove_scsi_controller(vm_name: Annotated[str, typer.Argument(help="The name
         sys.exit()
     vm_obj.controller_manager().remove_scsi_controller(controller_number)
     console.print(f"Removed ParaVirtualSCSIController{controller_number} from {vm_name}")
+
+
+if __name__ == "__main__":
+    app()

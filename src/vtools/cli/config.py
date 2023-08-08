@@ -47,3 +47,7 @@ def connect():
         user=connection_config.get('user'),
         pwd=connection_config.get('pwd')
     )
+
+
+if __name__ == "__main__":
+    app()

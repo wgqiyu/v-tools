@@ -36,11 +36,6 @@ def handle_exceptions(func):
             console.print(f"Exception occurred: {e}. Please enter a valid url.")
         except InvalidURL as e:
             console.print(f"Exception occurred: {e}. Please enter a valid url.")
-        # except vim.fault.HostConnectFault as e:
-        #     console.print(f"Exception occurred: {e.msg}")
-        #     console.print("Please secure internet connection and try again.")
-        # except vim.fault.HostNotConnected as e:
-        #     console.print(f"Exception occurred: {e}")
         except Exception as e:
             console.print(f"Exception occurred: {e}")
         sys.exit()
