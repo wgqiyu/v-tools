@@ -8,7 +8,9 @@ from typing_extensions import Annotated
 
 from vtools.cli import (
     disk,
-    snapshot
+    snapshot,
+    cpu,
+    controller
 )
 
 from vtools.cli.config import connect
@@ -17,13 +19,17 @@ from vtools.query import by
 app = typer.Typer()
 console = Console()
 app.add_typer(disk.app, name="disk", help="Operations related to Disk")
+app.add_typer(controller.app, name="controller", help="Operations related to Controller")
 app.add_typer(snapshot.app, name="snapshot", help="Operations related to Snapshot")
+app.add_typer(cpu.app, name="cpu", help="Operations related to Cpu")
 
 
 @app.command(name='list', help='List all the VMs on the host ESXi')
 def query(
-    field: Annotated[str, typer.Option(help="The field to filter on")] = None,
-    condition: Annotated[str, typer.Option(help="The condition to apply, i.e. lambda val: val == 'vm1'")] = None
+    field: Annotated[str, typer.Option(help="The field to filter on, i.e. name")] = None,
+    condition: Annotated[str, typer.Option(help="The condition to apply, i.e. "
+                                                "lambda val: val == '<name>', "
+                                                "lambda val: val.startswith('<name Substring>')")] = None
 ):
     if (field is None) ^ (condition is None):
         raise typer.BadParameter("Both 'field' and 'condition' need to be provided together")
@@ -42,6 +48,11 @@ def query(
     table.add_column("Memory", style="dim")
     table.add_column("CPUs", style="dim")
     for vm in vm_list:
+        # print(vm.vim_obj.runtime.host.hardware.memorySize)
+        # print(vm.vim_obj.runtime.host.hardware.memoryTierInfo)
+        # print(vm.vim_obj.runtime.host.hardware.memoryTieringType)
+        # print(vm.vim_obj.runtime.host.hardware.persistentMemoryInfo)
+        # print(vm.vim_obj.runtime.host.hardware.reliableMemoryInfo)
         table.add_row(vm.name, vm.primary_ip, escape(vm.path), vm.power_state, str(vm.memory), str(vm.num_cpus))
     console.print(table)
 
@@ -54,14 +65,14 @@ def power_on(vm_name: Annotated[str, typer.Argument(help="The name VM to power o
 
 
 @app.command(name='power_off', help='Power off the VM')
-def power_on(vm_name: Annotated[str, typer.Argument(help="The name VM to power off")]):
+def power_off(vm_name: Annotated[str, typer.Argument(help="The name VM to power off")]):
     esxi = connect()
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     vm_obj.power_off()
 
 
 @app.command(name='suspend', help='Suspend the VM')
-def power_on(vm_name: Annotated[str, typer.Argument(help="The name VM to suspend")]):
+def suspend(vm_name: Annotated[str, typer.Argument(help="The name VM to suspend")]):
     esxi = connect()
     vm_obj = esxi.vm_manager().get(lambda vm: vm.name == vm_name)
     vm_obj.suspend()

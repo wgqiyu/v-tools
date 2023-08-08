@@ -5,6 +5,7 @@ from typing import (
     TypeVar,
     Generic
 )
+from vtools.cli.exception import handle_exceptions
 
 T = TypeVar("T")
 
@@ -23,6 +24,7 @@ def by_name(condition: Callable[[Any], bool]) -> Callable[[T], bool]:
 
 
 class QueryMixin(Generic[T]):
+    @handle_exceptions
     def list(
         self,
         condition: Callable[[T], bool] = None

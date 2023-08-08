@@ -2,11 +2,11 @@ import sys
 from typing import (
     List
 )
-
+from loguru import logger
 from pyVim.connect import SmartConnect
 from pyVmomi import vim
 
-from vtools.exception import handle_exceptions
+from vtools.cli.exception import handle_exceptions
 from vtools.vsphere import get_first_vim_obj, create_config_spec, create_http_nfc_lease,\
     deploy_vm_with_pull_mode, create_import_spec
 from vtools.query import QueryMixin
@@ -28,7 +28,7 @@ class ESXi:
 
         self._login()
 
-    @handle_exceptions()
+    @handle_exceptions
     def _login(self) -> None:
         self._si = SmartConnect(host=self.ip,
                                 user=self.user,
@@ -37,7 +37,7 @@ class ESXi:
         self._content = self._si.RetrieveContent()
         self.vim_obj = get_first_vim_obj(content=self._content,
                                          vim_type=vim.HostSystem)
-        print(f"Connected to Host {self.ip}...")
+        logger.info(f"Connected to Host {self.ip}...")
 
     def datastore_manager(self):
         return DatastoreManager(self)
@@ -80,7 +80,7 @@ class VMManager(QueryMixin[VM]):
              guest_id: str,
              num_cpus: int) -> VM:
         if vm.power_state != "poweredOff":
-            print(f"The current state of the VM is {vm.power_state}, please turn off the VM to edit it.")
+            logger.info(f"The current state of the VM is {vm.power_state}, please turn off the VM to edit it.")
             sys.exit()
         config_spec = create_config_spec(new_name, datastore, annotation, memory_size, guest_id, num_cpus)
         task = vm.vim_obj.Reconfigure(config_spec)
@@ -98,38 +98,7 @@ class VMManager(QueryMixin[VM]):
         vm_destroy_task = vm.vim_obj.Destroy()
         WaitForTask(vm_destroy_task)
 
-    def add_scsi_controller(self, vm: VM):
-        spec = vim.vm.ConfigSpec()
-        scsi_ctr = vim.vm.device.VirtualDeviceSpec()
-        scsi_ctr.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
-        scsi_ctr.device = vim.vm.device.ParaVirtualSCSIController()
-        scsi_ctr.device.busNumber = 1
-        scsi_ctr.device.hotAddRemove = True
-        scsi_ctr.device.sharedBus = 'noSharing'
-        scsi_ctr.device.scsiCtlrUnitNumber = 7
-        spec.deviceChange = [scsi_ctr]
-        task = vm.vim_obj.ReconfigVM_Task(spec=spec)
-        WaitForTask(task)
-
-    def remove_scsi_controller(self, vm: VM, disk_num: int, disk_prefix_label='SCSI controller '):
-        disk_label = disk_prefix_label + str(disk_num)
-        # Find the disk device
-        virtual_disk_device = None
-        for device in vm.vim_obj.config.hardware.device:
-            if isinstance(device, vim.vm.device.ParaVirtualSCSIController) and device.deviceInfo.label == disk_label:
-                virtual_disk_device = device
-        if not virtual_disk_device:
-            print(f"Virtual {disk_label} could not be found.")
-            sys.exit()
-        spec = vim.vm.ConfigSpec()
-        disk_spec = vim.vm.device.VirtualDeviceSpec()
-        disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
-        disk_spec.device = virtual_disk_device
-        dev_changes = [disk_spec]
-        spec.deviceChange = dev_changes
-        WaitForTask(vm.vim_obj.ReconfigVM_Task(spec=spec))
-
-    @handle_exceptions()
+    @handle_exceptions
     def import_ovf(self, name: str, datastore: Datastore, ovf_url: str):
         resource_pool_vim_obj = self.esxi.vim_obj.parent.resourcePool
         datacenter_vim_obj = get_first_vim_obj(self.esxi._content, vim.Datacenter)

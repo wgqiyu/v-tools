@@ -12,6 +12,10 @@ from typing import (
 
 from pyVim.task import WaitForTask
 from pyVmomi import vim
+
+from vtools.cli.exception import handle_exceptions
+from vtools.controller import Controller
+from vtools.cpu import Cpu, CpuInfo
 from vtools.disk import Disk
 from vtools.snapshot import Snapshot
 from vtools.query import QueryMixin
@@ -76,8 +80,17 @@ class VM:
     def disk_manager(self):
         return DiskManager(self)
 
+    def controller_manager(self):
+        return ControllerManager(self)
+
     def snapshot_manager(self):
         return SnapshotManager(self)
+
+    def cpu_manager(self):
+        return CpuManager(self)
+
+    # def memory_manager(self):
+    #     return MemoryManager(self)
 
     @retry(stop=stop_after_attempt(12),
            wait=wait_fixed(5))
@@ -124,6 +137,31 @@ class VM:
             logger.info(f"PowerStatus was {expected_state}")
 
 
+class CpuManager(QueryMixin[Cpu]):
+    def __init__(self, vm_obj: VM) -> None:
+        self.vm_obj = vm_obj
+
+    def info(self):
+        return CpuInfo(self.vm_obj.vim_obj.runtime.host.hardware.cpuInfo)
+
+    def _list_all(self) -> List[Cpu]:
+        cpu_pkgs = self.vm_obj.vim_obj.runtime.host.hardware.cpuPkg
+        return [Cpu(cpu_obj) for cpu_obj in cpu_pkgs]
+
+
+# class MemoryManager(QueryMixin[Memory]):
+#     def __init__(self, vm_obj: VM) -> None:
+#         self.vm_obj = vm_obj
+#
+#     def _list_all(self) -> List[Memory]:
+#         snapshot_data = []
+#         snapshot = self.vm_obj.vim_obj.snapshot
+#         if snapshot is not None:
+#             list_snapshots_recursively(snapshot_data, snapshot.rootSnapshotList)
+#             return snapshot_data
+#         else:
+#             return snapshot_data
+
 class SnapshotManager(QueryMixin[Snapshot]):
     def __init__(self, vm_obj: VM) -> None:
         self.vm_obj = vm_obj
@@ -142,7 +180,7 @@ class SnapshotManager(QueryMixin[Snapshot]):
                         memory: bool = True,
                         quiesce: bool = False):
         if [vm_obj for vm_obj in self.vm_obj.snapshot_manager().list() if vm_obj.vim_obj.name == name]:
-            print(f"Invalid Name: The VM snapshot name {name} has already exist. ")
+            logger.info(f"Invalid Name: The VM snapshot name {name} has already exist. ")
             sys.exit()
         task = self.vm_obj.vim_obj.CreateSnapshot(name, description, memory, quiesce)
         WaitForTask(task)
@@ -151,11 +189,12 @@ class SnapshotManager(QueryMixin[Snapshot]):
 
     def destroy_snapshot(self, snapshot_name: str):
         snapshot = self.vm_obj.snapshot_manager().get(lambda ss: ss.name == snapshot_name)
-        if snapshot is not None:
+        if snapshot is None:
+            logger.info("Invalid Snapshot Name: The Snapshot you designated does not exist.")
+            sys.exit()
+        else:
             WaitForTask(snapshot.vim_obj.snapshot.Remove(removeChildren=False))
             return snapshot_name
-        else:
-            print("Invalid Snapshot Name: The Snapshot you designated does not exist")
 
 
 class DiskManager(QueryMixin[Disk]):
@@ -163,11 +202,10 @@ class DiskManager(QueryMixin[Disk]):
         self.vm_obj = vm_obj
 
     def _list_all(self) -> List[Disk]:
-        return [Disk(disk_vm_obj) for disk_vm_obj
-                in self.vm_obj.vim_obj.config.hardware.device
-                if isinstance(disk_vm_obj, vim.vm.device.VirtualDisk) or
-                isinstance(disk_vm_obj, vim.vm.device.ParaVirtualSCSIController)]
+        return [Disk(disk_obj) for disk_obj in self.vm_obj.vim_obj.config.hardware.device
+                if isinstance(disk_obj, vim.vm.device.VirtualDisk)]
 
+    @handle_exceptions
     def add_disk(self, disk_size: int, disk_type: str):
         spec = vim.vm.ConfigSpec()
         unit_number = 0
@@ -179,12 +217,10 @@ class DiskManager(QueryMixin[Disk]):
             if hasattr(device.backing, 'fileName'):
                 unit_number = int(device.unitNumber) + 1
                 if unit_number >= 16:
-                    print("we don't support this many disks")
-                    return
+                    logger.info("we don't support this many disks")
+                    sys.exit()
         if controller is None:
-            print("Disk SCSI controller not found! Please use the below command:")
-            print("\tpython main.py disk add_controller <vm_name>")
-            sys.exit()
+            return None
 
         disk_spec = create_disk_spec(disk_size, disk_type)
         disk_spec.device.unitNumber = unit_number
@@ -194,6 +230,7 @@ class DiskManager(QueryMixin[Disk]):
         WaitForTask(task)
         return Disk(task.info.result)
 
+    @handle_exceptions
     def remove_disk(self, disk_num: int, disk_prefix_label='Hard disk '):
         disk_label = disk_prefix_label + str(disk_num)
         # Find the disk device
@@ -202,9 +239,58 @@ class DiskManager(QueryMixin[Disk]):
             if isinstance(device, vim.vm.device.VirtualDisk) and device.deviceInfo.label == disk_label:
                 virtual_disk_device = device
         if not virtual_disk_device:
-            print(f"Virtual {disk_label} could not be found.")
+            logger.info(f"Virtual {disk_label} could not be found.")
             sys.exit()
 
+        spec = vim.vm.ConfigSpec()
+        disk_spec = vim.vm.device.VirtualDeviceSpec()
+        disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
+        disk_spec.device = virtual_disk_device
+        dev_changes = [disk_spec]
+        spec.deviceChange = dev_changes
+        WaitForTask(self.vm_obj.vim_obj.ReconfigVM_Task(spec=spec))
+
+
+class ControllerManager(QueryMixin[Controller]):
+    def __init__(self, vm_obj: VM) -> None:
+        self.vm_obj = vm_obj
+
+    def _list_all(self) -> List[Controller]:
+        for i in self.vm_obj.vim_obj.config.hardware.device:
+            print(i.deviceInfo.label)
+        return [Controller(controller_obj) for controller_obj in self.vm_obj.vim_obj.config.hardware.device
+                if isinstance(controller_obj, vim.vm.device.VirtualController)]
+
+    @handle_exceptions
+    def add_scsi_controller(self):
+        bus_number = 0
+        for device in self.vm_obj.vim_obj.config.hardware.device:
+            if isinstance(device, vim.vm.device.VirtualSCSIController):
+                bus_number += 1
+        spec = vim.vm.ConfigSpec()
+        scsi_ctr = vim.vm.device.VirtualDeviceSpec()
+        scsi_ctr.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        scsi_ctr.device = vim.vm.device.ParaVirtualSCSIController()
+        scsi_ctr.device.busNumber = bus_number
+        scsi_ctr.device.hotAddRemove = True
+        scsi_ctr.device.sharedBus = 'noSharing'
+        scsi_ctr.device.scsiCtlrUnitNumber = 7
+        spec.deviceChange = [scsi_ctr]
+        task = self.vm_obj.vim_obj.ReconfigVM_Task(spec=spec)
+        WaitForTask(task)
+
+    @handle_exceptions
+    def remove_scsi_controller(self, disk_num: int, disk_prefix_label='SCSI controller '):
+        disk_label = disk_prefix_label + str(disk_num)
+        # Find the disk device
+        virtual_disk_device = None
+        for device in self.vm_obj.vim_obj.config.hardware.device:
+            if isinstance(device, vim.vm.device.ParaVirtualSCSIController)\
+                    and device.deviceInfo.label == disk_label:
+                virtual_disk_device = device
+        if virtual_disk_device is None:
+            logger.info(f"Virtual {disk_label} could not be found.")
+            sys.exit()
         spec = vim.vm.ConfigSpec()
         disk_spec = vim.vm.device.VirtualDeviceSpec()
         disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove

@@ -5,7 +5,7 @@ from typing_extensions import Annotated
 from rich.console import Console
 
 from vtools.esxi import ESXi
-from vtools.exception import handle_exceptions
+from vtools.cli.exception import handle_exceptions
 
 app = typer.Typer()
 console = Console()
@@ -39,7 +39,7 @@ def get_config():
         console.print(f'{config_key} = {connection_config.get(config_key)}')
 
 
-@handle_exceptions()
+@handle_exceptions
 def connect():
     connection_config = config['CONNECTION']
     return ESXi(

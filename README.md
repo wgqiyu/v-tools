@@ -8,5 +8,4 @@ VMs and datastore on the ESXi account.
 - Datastore class: a class that represents a datastore, along with all of its properties.
 
 # Usage
-![img.png](img.png)
 

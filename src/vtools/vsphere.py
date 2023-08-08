@@ -7,7 +7,7 @@ from typing import (
 from pyVmomi import vim
 from pyVmomi.VmomiSupport import ManagedObject
 
-from vtools.exception import handle_exceptions
+from vtools.cli.exception import handle_exceptions
 from vtools.snapshot import Snapshot
 from pyVim.task import WaitForTask
 
@@ -106,7 +106,7 @@ def list_snapshots_recursively(snapshot_data, snapshots):
     return snapshot_data
 
 
-@handle_exceptions()
+@handle_exceptions
 def create_import_spec(
     content: vim.ServiceInstanceContent,
     ovf_url: str,
