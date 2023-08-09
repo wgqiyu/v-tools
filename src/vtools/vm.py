@@ -1,21 +1,22 @@
 import sys
+from functools import cached_property
+from typing import List
+
 from loguru import logger
+from pyVim.task import WaitForTask
+from pyVmomi import vim
 from tenacity import (
     retry,
     stop_after_attempt,
     wait_fixed,
     TryAgain
 )
-from typing import (
-    List
-)
 
-from pyVim.task import WaitForTask
-from pyVmomi import vim
-from vtools.disk import Disk
-from vtools.snapshot import Snapshot
+from vtools.device import Controller, Disk
+from vtools.exception import InvalidStateError
 from vtools.query import QueryMixin
-from vtools.vsphere import create_disk_spec, list_snapshots_recursively
+from vtools.snapshot import Snapshot
+from vtools.vsphere import list_snapshots_recursively
 
 
 class VM:
@@ -24,6 +25,9 @@ class VM:
         vim_obj: vim.VirtualMachine
     ) -> None:
         self.vim_obj = vim_obj
+
+    def __repr__(self) -> str:
+        return f'VM(vim_obj={self.vim_obj!r})'
 
     @property
     def name(self) -> str:
@@ -50,16 +54,33 @@ class VM:
         return self.vim_obj.summary.runtime.powerState
 
     @property
-    def memory(self) -> int:
-        return self.vim_obj.summary.config.memorySizeMB
+    def hardware_version(self) -> str:
+        return self.vim_obj.config.version
 
     @property
-    def num_cpus(self) -> int:
-        return self.vim_obj.summary.config.numCpu
+    def esxi(self) -> 'ESXi':
+        from vtools.esxi import ESXi
+        return ESXi(vim_obj=self.vim_obj.runtime.host)
 
-    def __repr__(self) -> str:
-        return f'VM(vim_obj={self.vim_obj!r}, name={self.name}, ip={self.ips}, ' \
-               f'memory={self.memory}, num_cpus={self.num_cpus})'
+    @cached_property
+    def config_option(self) -> vim.vm.ConfigOption:
+        return self.esxi.get_vm_config_option(self.hardware_version)
+
+    @cached_property
+    def cpu(self) -> 'CpuManager':
+        return CpuManager(self)
+
+    @cached_property
+    def memory(self) -> 'MemoryManager':
+        return MemoryManager(self)
+
+    @cached_property
+    def controllers(self) -> 'ControllerManager':
+        return ControllerManager(self)
+
+    @cached_property
+    def disks(self) -> 'DiskManager':
+        return DiskManager(self)
 
     def power_on(self) -> None:
         self._invoke_power_on()
@@ -72,9 +93,6 @@ class VM:
     def suspend(self):
         self._invoke_suspend()
         self._wait_until_power_state_is(vim.VirtualMachine.PowerState.suspended)
-
-    def disk_manager(self):
-        return DiskManager(self)
 
     def snapshot_manager(self):
         return SnapshotManager(self)
@@ -124,6 +142,68 @@ class VM:
             logger.info(f"PowerStatus was {expected_state}")
 
 
+class CpuManager:
+    def __init__(self, vm: VM) -> None:
+        self.vm = vm
+
+    @property
+    def number(self) -> int:
+        return self.vm.vim_obj.config.hardware.numCPU
+
+    @number.setter
+    def number(self, value) -> None:
+        if self.vm.power_state != vim.VirtualMachine.PowerState.poweredOff:
+            raise InvalidStateError()
+
+        config_spec = vim.vm.ConfigSpec()
+        config_spec.numCPUs = value
+
+        WaitForTask(self.vm.vim_obj.Reconfigure(config_spec))
+
+    @property
+    def cores_per_socket(self) -> int:
+        return self.vm.vim_obj.config.numCoresPerSocket
+
+    @cores_per_socket.setter
+    def cores_per_socket(self, value) -> None:
+        if self.vm.power_state != vim.VirtualMachine.PowerState.poweredOff:
+            raise InvalidStateError()
+
+        config_spec = vim.vm.ConfigSpec()
+        config_spec.numCoresPerSocket = value
+
+        WaitForTask(self.vm.vim_obj.Reconfigure(config_spec))
+
+
+class MemoryManager:
+    def __init__(self, vm: VM) -> None:
+        self.vm = vm
+
+    @property
+    def size_in_mb(self) -> int:
+        return self.vm.vim_obj.config.hardware.memoryMB
+
+    @size_in_mb.setter
+    def size_in_mb(self, value) -> None:
+        if self.vm.power_state != vim.VirtualMachine.PowerState.poweredOff:
+            raise InvalidStateError()
+
+        config_spec = vim.vm.ConfigSpec()
+        config_spec.memoryMB = value
+
+        WaitForTask(self.vm.vim_obj.Reconfigure(config_spec))
+
+
+class ControllerManager(QueryMixin[Controller]):
+    def __init__(self, vm: VM) -> None:
+        self.vm = vm
+
+    def _list_all(self) -> List[Controller]:
+        return [Controller(device_vim_obj, self.vm) for device_vim_obj
+                in self.vm.vim_obj.config.hardware.device
+                if isinstance(device_vim_obj, vim.vm.device.VirtualController)]
+
+
 class SnapshotManager(QueryMixin[Snapshot]):
     def __init__(self, vm_obj: VM) -> None:
         self.vm_obj = vm_obj
@@ -159,56 +239,44 @@ class SnapshotManager(QueryMixin[Snapshot]):
 
 
 class DiskManager(QueryMixin[Disk]):
-    def __init__(self, vm_obj: VM) -> None:
-        self.vm_obj = vm_obj
+    def __init__(self, vm: VM) -> None:
+        self.vm = vm
 
     def _list_all(self) -> List[Disk]:
-        return [Disk(disk_vm_obj) for disk_vm_obj
-                in self.vm_obj.vim_obj.config.hardware.device
-                if isinstance(disk_vm_obj, vim.vm.device.VirtualDisk) or
-                isinstance(disk_vm_obj, vim.vm.device.ParaVirtualSCSIController)]
+        return [Disk(device_vim_obj, self.vm) for device_vim_obj
+                in self.vm.vim_obj.config.hardware.device
+                if isinstance(device_vim_obj, vim.vm.device.VirtualDisk)]
 
-    def add_disk(self, disk_size: int, disk_type: str):
-        spec = vim.vm.ConfigSpec()
-        unit_number = 0
-        controller = None
-        for device in self.vm_obj.vim_obj.config.hardware.device:
-            if isinstance(device, vim.vm.device.VirtualSCSIController):
-                controller = device
-                unit_number += 1
-            if hasattr(device.backing, 'fileName'):
-                unit_number = int(device.unitNumber) + 1
-                if unit_number >= 16:
-                    print("we don't support this many disks")
-                    return
-        if controller is None:
-            print("Disk SCSI controller not found! Please use the below command:")
-            print("\tpython main.py disk add_controller <vm_name>")
-            sys.exit()
+    def add(
+        self,
+        size_in_mb: int,
+        backing: vim.vm.device.VirtualDevice.FileBackingInfo,
+        controller: Controller
+    ) -> None:
+        existing_disks = self.list()
 
-        disk_spec = create_disk_spec(disk_size, disk_type)
-        disk_spec.device.unitNumber = unit_number
-        disk_spec.device.controllerKey = controller.key
-        spec.deviceChange = [disk_spec]
-        task = self.vm_obj.vim_obj.ReconfigVM_Task(spec=spec)
-        WaitForTask(task)
-        return Disk(task.info.result)
+        new_disk = vim.vm.device.VirtualDisk()
+        new_disk.key = -1
+        new_disk.controllerKey = controller.key
+        new_disk.unitNumber = controller.next_free_unit
+        new_disk.backing = backing
+        new_disk.capacityInKB = size_in_mb * 1024
 
-    def remove_disk(self, disk_num: int, disk_prefix_label='Hard disk '):
-        disk_label = disk_prefix_label + str(disk_num)
-        # Find the disk device
-        virtual_disk_device = None
-        for device in self.vm_obj.vim_obj.config.hardware.device:
-            if isinstance(device, vim.vm.device.VirtualDisk) and device.deviceInfo.label == disk_label:
-                virtual_disk_device = device
-        if not virtual_disk_device:
-            print(f"Virtual {disk_label} could not be found.")
-            sys.exit()
+        new_disk_spec = vim.vm.device.VirtualDeviceSpec()
+        new_disk_spec.operation = (
+            vim.vm.device.VirtualDeviceSpec.Operation.add
+        )
+        new_disk_spec.fileOperation = (
+            vim.vm.device.VirtualDeviceSpec.FileOperation.create
+        )
 
-        spec = vim.vm.ConfigSpec()
-        disk_spec = vim.vm.device.VirtualDeviceSpec()
-        disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
-        disk_spec.device = virtual_disk_device
-        dev_changes = [disk_spec]
-        spec.deviceChange = dev_changes
-        WaitForTask(self.vm_obj.vim_obj.ReconfigVM_Task(spec=spec))
+        new_disk_spec.device = new_disk
+
+        config_spec = vim.vm.ConfigSpec()
+        config_spec.deviceChange = [new_disk_spec]
+
+        WaitForTask(self.vm.vim_obj.Reconfigure(config_spec))
+
+        new_disks = [disk for disk in self.list() if disk not in existing_disks]
+        return new_disks[0]
+

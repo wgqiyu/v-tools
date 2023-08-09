@@ -18,15 +18,23 @@ from pyVim.task import WaitForTask
 class ESXi:
     def __init__(
         self,
+        vim_obj: vim.HostSystem = None,
         ip: str = 'localhost',
         user: str = 'root',
         pwd: str = ''
     ) -> None:
-        self.ip = ip
-        self.user = user
-        self.pwd = pwd
+        if vim_obj is None:
+            self.ip = ip
+            self.user = user
+            self.pwd = pwd
 
-        self._login()
+            self._login()
+        else:
+            self.vim_obj = vim_obj
+
+            self.ip = None
+            self.user = None
+            self.pwd = None
 
     @handle_exceptions()
     def _login(self) -> None:
@@ -42,8 +50,15 @@ class ESXi:
     def datastore_manager(self):
         return DatastoreManager(self)
 
-    def vm_manager(self):
+    def vm_manager(self) -> "VMManager":
         return VMManager(self)
+
+    def get_vm_config_option(
+        self,
+        hardware_version: str = None
+    ) -> vim.vm.ConfigOption:
+        env_browser = self.vim_obj.parent.environmentBrowser
+        return env_browser.QueryConfigOption(hardware_version, None)
 
 
 class VMManager(QueryMixin[VM]):

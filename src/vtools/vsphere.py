@@ -4,14 +4,10 @@ from typing import (
     Type
 )
 
+import requests
+from pyVim.task import WaitForTask
 from pyVmomi import vim
 from pyVmomi.VmomiSupport import ManagedObject
-
-from vtools.exception import handle_exceptions
-from vtools.snapshot import Snapshot
-from pyVim.task import WaitForTask
-
-import requests
 from requests.compat import urljoin
 from tenacity import (
     retry,
@@ -19,6 +15,9 @@ from tenacity import (
     wait_fixed,
     TryAgain
 )
+
+from vtools.exception import handle_exceptions
+from vtools.snapshot import Snapshot
 
 
 def list_vim_obj(
@@ -48,6 +47,16 @@ def get_first_vim_obj(
     vim_obj_list = list_vim_obj(content, vim_type, container_vim_obj, recurse)
     if len(vim_obj_list) > 0:
         return vim_obj_list[0]
+    return None
+
+
+def find_device_option_by_type(
+    config_option: vim.vm.ConfigOption,
+    device_type: Type[vim.vm.device.VirtualDevice]
+) -> vim.vm.device.VirtualDeviceOption:
+    for device_option in config_option.hardwareOptions.virtualDeviceOption:
+        if device_option.type == device_type:
+            return device_option
     return None
 
 
