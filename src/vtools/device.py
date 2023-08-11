@@ -1,10 +1,38 @@
 from enum import Enum
-from typing import List
+from typing import (
+    List,
+    Optional
+)
 
 from pyVmomi import vim
 
 from vtools.query import by
 from vtools.vsphere import find_device_option_by_type
+
+
+class ScsiControllerType(Enum):
+    LsiLogic = (vim.vm.device.VirtualLsiLogicController)
+    ParaVirtualSCSI = (vim.vm.device.ParaVirtualSCSIController)
+    BusLogic = (vim.vm.device.VirtualBusLogicController)
+    LsiLogicSAS = (vim.vm.device.VirtualLsiLogicSASController)
+
+    def __init__(self, clazz):
+        self.vim_class = clazz
+
+
+class ScsiBusSharingType(Enum):
+    NoSharing = (
+        vim.vm.device.VirtualSCSIController.Sharing.noSharing
+    )
+    VirtualSharing = (
+        vim.vm.device.VirtualSCSIController.Sharing.virtualSharing
+    )
+    PhysicalSharing = (
+        vim.vm.device.VirtualSCSIController.Sharing.physicalSharing
+    )
+
+    def __init__(self, value) -> None:
+        self.vim_value = value
 
 
 class DiskModeType(Enum):
@@ -75,7 +103,7 @@ class Controller(Device):
         return f'Controller(vim_obj={self.vim_obj!r})'
 
     @property
-    def next_free_unit(self) -> int:
+    def next_free_unit(self) -> Optional[int]:
         device_option = find_device_option_by_type(
             self.vm.config_option, type(self.vim_obj)
         )
@@ -134,3 +162,38 @@ class Disk(Device):
         )
 
 
+class ScsiControllerCreateSpec:
+    def __init__(self, controller_type: ScsiControllerType) -> None:
+        self.controller_type = controller_type
+        self.bus_sharing = ScsiBusSharingType.NoSharing
+
+    def set_bus_sharing(self, value: ScsiBusSharingType) -> None:
+        self.bus_sharing = value
+
+    @property
+    def vim_device_spec(self) -> vim.vm.device.VirtualDeviceSpec:
+        new_device_spec = vim.vm.device.VirtualDeviceSpec()
+        new_device_spec.operation = (
+            vim.vm.device.VirtualDeviceSpec.Operation.add
+        )
+
+        new_controller = self.controller_type.vim_class()
+        new_controller.sharedBus = self.bus_sharing.vim_value
+        new_device_spec.device = new_controller
+
+        return new_device_spec
+
+
+class DiskCreateSpec:
+    @property
+    def vim_device_spec(self) -> vim.vm.device.VirtualDeviceSpec:
+        new_device_spec = vim.vm.device.VirtualDeviceSpec()
+        new_device_spec.operation = (
+            vim.vm.device.VirtualDeviceSpec.Operation.add
+        )
+
+        new_controller = self.controller_type.vim_class()
+        new_controller.sharedBus = self.bus_sharing.vim_value
+        new_device_spec.device = new_controller
+
+        return new_device_spec
