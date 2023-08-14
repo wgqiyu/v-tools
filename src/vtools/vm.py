@@ -237,17 +237,20 @@ class ScsiControllerManager(QueryMixin[Controller]):
                 isinstance(device_vim_obj, vim.vm.device.VirtualSCSIController)]
 
     def add(self, spec: ScsiControllerCreateSpec) -> None:
-        existing_scsi_controllers = self.list()
+        existing_controllers = self.list()
 
         new_controller_spec = spec.vim_device_spec
         new_controller_spec.device.key = -1
-        new_controller_spec.device.busNumber = len(
-            existing_scsi_controllers) + 1
+        new_controller_spec.device.busNumber = len(existing_controllers)
 
         config_spec = vim.vm.ConfigSpec()
         config_spec.deviceChange = [new_controller_spec]
 
         WaitForTask(self.vm.vim_obj.Reconfigure(config_spec))
+
+        new_controllers = [controller for controller in self.list()
+                           if controller not in existing_controllers]
+        return new_controllers[0]
 
 
 class DiskManager(QueryMixin[Disk]):
@@ -322,7 +325,7 @@ class SnapshotManager(QueryMixin[Snapshot]):
     def create(
         self,
         name: str,
-        snapshot_type: SnapshotType,
+        snapshot_type: SnapshotType = SnapshotType.SIMPLE,
         description: str = None
     ) -> Snapshot:
         task = self.vm.vim_obj.CreateSnapshot(
@@ -472,6 +475,7 @@ class CreateVMSpec:
 
         task = vm_folder_vim_obj.CreateVm(config_spec, resource_pool_vim_obj,
                                           esxi.vim_obj)
+        WaitForTask(task)
         return VM(task.info.result)
 
     def _add_device(self, device: vim.vm.device.VirtualDevice) -> None:
