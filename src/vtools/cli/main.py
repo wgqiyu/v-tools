@@ -1,10 +1,15 @@
 import typer
+import sys
+from loguru import logger
 
 from vtools.cli import (
     config,
     vm,
     datastore,
 )
+
+logger.remove(0)
+logger.add(sys.stderr, level="ERROR")
 
 app = typer.Typer()
 app.add_typer(config.app, name='config', help="Operations related to connection configuration")

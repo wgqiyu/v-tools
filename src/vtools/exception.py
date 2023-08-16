@@ -38,3 +38,7 @@ def handle_exceptions():
             sys.exit()
         return wrapper
     return decorator
+
+
+class InvalidStateError(RuntimeError):
+   pass

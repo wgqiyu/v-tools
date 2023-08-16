@@ -4,14 +4,10 @@ from typing import (
     Type
 )
 
+import requests
+from pyVim.task import WaitForTask
 from pyVmomi import vim
 from pyVmomi.VmomiSupport import ManagedObject
-
-from vtools.exception import handle_exceptions
-from vtools.snapshot import Snapshot
-from pyVim.task import WaitForTask
-
-import requests
 from requests.compat import urljoin
 from tenacity import (
     retry,
@@ -51,6 +47,16 @@ def get_first_vim_obj(
     return None
 
 
+def find_device_option_by_type(
+    config_option: vim.vm.ConfigOption,
+    device_type: Type[vim.vm.device.VirtualDevice]
+) -> vim.vm.device.VirtualDeviceOption:
+    for device_option in config_option.hardwareOptions.virtualDeviceOption:
+        if device_option.type == device_type:
+            return device_option
+    return None
+
+
 def get_vim_obj_by_name(
     content: vim.ServiceInstanceContent,
     vim_type: Type[vim.ManagedEntity],
@@ -65,48 +71,6 @@ def get_vim_obj_by_name(
     return None
 
 
-def create_config_spec(name: str,
-                       datastore: vim.Datastore,
-                       annotation: str,
-                       memory_size: int,
-                       guest_id: str,
-                       num_cpus: int) -> vim.vm.ConfigSpec:
-    config_spec = vim.vm.ConfigSpec()
-    config_spec.annotation = annotation
-    config_spec.memoryMB = memory_size
-    config_spec.guestId = guest_id
-    config_spec.numCPUs = num_cpus
-    config_spec.name = name
-    files = vim.vm.FileInfo()
-    files.vmPathName = f"[{datastore.name}]"
-    config_spec.files = files
-
-    return config_spec
-
-
-def create_disk_spec(disk_size: int, disk_type: str) -> vim.vm.device.VirtualDeviceSpec:
-    disk_in_kb = int(disk_size) * 1024 * 1024
-    disk_spec = vim.vm.device.VirtualDeviceSpec()
-    disk_spec.fileOperation = "create"
-    disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
-    disk_spec.device = vim.vm.device.VirtualDisk()
-    disk_spec.device.backing = vim.vm.device.VirtualDisk.FlatVer2BackingInfo()
-    if disk_type == 'thin':
-        disk_spec.device.backing.thinProvisioned = True
-    disk_spec.device.backing.diskMode = 'persistent'
-    disk_spec.device.capacityInKB = disk_in_kb
-    return disk_spec
-
-
-def list_snapshots_recursively(snapshot_data, snapshots):
-    if snapshots is not None:
-        for snapshot in snapshots:
-            snapshot_data.append(Snapshot(snapshot))
-            list_snapshots_recursively(snapshot_data, snapshot.childSnapshotList)
-    return snapshot_data
-
-
-@handle_exceptions()
 def create_import_spec(
     content: vim.ServiceInstanceContent,
     ovf_url: str,
@@ -115,7 +79,6 @@ def create_import_spec(
     vm_name: str = None,
     disk_provisioning: str = None
 ) -> vim.OvfManager.CreateImportSpecResult:
-
     response = requests.get(ovf_url)
     response.encoding = "utf-8"
     ovf_descriptor = response.text
@@ -145,7 +108,8 @@ def create_import_spec(
 def create_http_nfc_lease(resource_pool_vim_obj: vim.ResourcePool,
                           spec_vim_obj: vim.ImportSpec,
                           folder_vim_obj: vim.Folder) -> vim.HttpNfcLease:
-    http_nfc_lease = resource_pool_vim_obj.ImportVApp(spec_vim_obj, folder_vim_obj)
+    http_nfc_lease = resource_pool_vim_obj.ImportVApp(spec_vim_obj,
+                                                      folder_vim_obj)
 
     @retry(stop=stop_after_attempt(6),
            wait=wait_fixed(5))
@@ -171,3 +135,4 @@ def deploy_vm_with_pull_mode(ovf_url, import_spec, http_nfc_lease):
         source_files.append(source_file)
     task = http_nfc_lease.PullFromUrls(source_files)
     WaitForTask(task)
+    return task
